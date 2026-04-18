@@ -1,0 +1,27 @@
+{
+  "tracked_accounts": [],
+  "discovery": {
+    "min_positions": 20,
+    "min_win_rate": 0.55,
+    "min_profit_usd": 1000,
+    "scoring_formula": "win_rate * ln(1 + total_positions)",
+    "refresh_weekly": true,
+    "max_tracked": 25
+  },
+  "categories_of_interest": [
+    "politics_us",
+    "politics_global",
+    "crypto_prices",
+    "economics",
+    "geopolitics",
+    "technology",
+    "sports"
+  ],
+  "scoring_weights": {
+    "win_rate": 0.35,
+    "consistency": 0.25,
+    "category_diversity": 0.15,
+    "conviction_sizing": 0.15,
+    "recency": 0.10
+  }
+}

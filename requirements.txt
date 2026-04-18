@@ -1,0 +1,34 @@
+# Broker & exchange
+ccxt>=4.0.0                    # Unified crypto exchange API (Bybit, Binance, etc.)
+
+# Technical analysis
+ta>=0.11.0                     # Technical analysis library (RSI, MACD, BB, ATR)
+pandas>=2.0.0                  # Data manipulation
+numpy>=1.24.0                  # Numerical computing
+
+# AI
+anthropic>=0.40.0              # Claude API
+
+# Market data & news
+requests>=2.31.0               # HTTP requests
+aiohttp>=3.9.0                 # Async HTTP
+websockets>=12.0               # Real-time price feeds
+
+# Polymarket
+py-clob-client>=0.1.0          # Polymarket CLOB API client
+
+# PDF reports
+reportlab>=4.0.0               # PDF generation
+
+# Database
+# SQLite is built-in to Python
+
+# Notifications
+python-telegram-bot>=20.0      # Telegram alerts
+
+# Infrastructure
+modal>=0.73.0                  # Cloud deployment
+python-dotenv>=1.0.0           # Environment variable management
+
+# Utilities
+schedule>=1.2.0                # Local task scheduling (development)

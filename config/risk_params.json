@@ -1,0 +1,53 @@
+{
+  "market_trading": {
+    "max_risk_per_trade_pct": 2.0,
+    "max_daily_drawdown_pct": 6.0,
+    "max_weekly_drawdown_pct": 15.0,
+    "max_portfolio_exposure_pct": 30.0,
+    "max_correlated_positions": 3,
+    "require_stop_loss": true,
+    "min_risk_reward_ratio": 2.0,
+    "leverage_limits": {
+      "default": 3,
+      "high_conviction_min_confluence": 80,
+      "high_conviction_max": 10,
+      "absolute_max": 10
+    },
+    "stop_loss": {
+      "default_atr_multiplier": 2.0,
+      "max_stop_distance_pct": 5.0,
+      "trailing_stop_activation_pct": 1.5,
+      "trailing_stop_distance_pct": 1.0
+    },
+    "take_profit": {
+      "default_rr_ratio": 2.0,
+      "partial_tp_at_1r_pct": 50,
+      "let_remainder_run_with_trailing": true
+    },
+    "circuit_breakers": {
+      "halt_after_consecutive_losses": 3,
+      "halt_duration_hours": 4,
+      "daily_loss_halt_pct": 6.0,
+      "weekly_loss_halt_pct": 15.0,
+      "require_manual_resume_after_weekly_halt": true
+    }
+  },
+  "polymarket": {
+    "max_bet_pct_bankroll": 5.0,
+    "min_edge_pct": 5.0,
+    "kelly_fraction": 0.25,
+    "max_exposure_per_category_pct": 15.0,
+    "max_total_exposure_pct": 40.0,
+    "min_market_liquidity_usd": 10000,
+    "max_correlated_bets": 3,
+    "diversification": {
+      "min_categories": 3,
+      "max_single_category_pct": 30
+    }
+  },
+  "capital": {
+    "initial_market_usd": 250,
+    "initial_polymarket_usd": 250,
+    "rebalance_threshold_pct": 20
+  }
+}

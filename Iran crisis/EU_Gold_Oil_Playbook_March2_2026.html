@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOLD & OIL WAR PLAYBOOK — EUROPEAN EDITION — MARCH 2, 2026</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --gold: #C9A84C;
+  --gold-light: #E8C97A;
+  --gold-dim: #7A6430;
+  --oil: #2A6B4F;
+  --oil-light: #3DBA87;
+  --oil-dim: #1A4030;
+  --red: #D94040;
+  --cream: #F5EDD8;
+  --cream-dim: #D4C9A8;
+  --ink: #0E0D0A;
+  --ink2: #1C1A14;
+  --ink3: #2A2820;
+  --border: rgba(201,168,76,0.18);
+  --border-strong: rgba(201,168,76,0.4);
+  --text: #EDE8DA;
+  --muted: #8A8070;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--ink);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-x: hidden;
+}
+
+/* ─── GRAIN OVERLAY ─── */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:1000; mix-blend-mode: overlay; opacity:0.6;
+}
+
+/* ─── MASTHEAD ─── */
+.masthead {
+  background: var(--ink);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+.masthead-ticker {
+  background: var(--gold);
+  padding: 6px 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker-inner {
+  display: inline-block;
+  animation: ticker 30s linear infinite;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: 1px;
+}
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.masthead-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 56px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.edition-badge {
+  background: var(--gold);
+  color: var(--ink);
+  padding: 3px 10px;
+  font-size: 9px;
+  letter-spacing: 3px;
+  font-weight: 500;
+}
+.masthead-hero {
+  padding: 56px 56px 40px;
+  position: relative;
+}
+.masthead-hero::before {
+  content: 'GOLD & OIL';
+  position: absolute;
+  right: 56px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(80px, 12vw, 180px);
+  font-weight: 900;
+  color: rgba(201,168,76,0.05);
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+.issue-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 4px;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.live-dot {
+  width: 7px; height: 7px;
+  background: var(--red);
+  border-radius: 50%;
+  animation: blink 1s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+h1.masthead-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(38px, 6vw, 78px);
+  font-weight: 900;
+  line-height: 1.0;
+  letter-spacing: -2px;
+  color: var(--cream);
+  max-width: 700px;
+  margin-bottom: 24px;
+}
+h1.masthead-title em {
+  color: var(--gold);
+  font-style: italic;
+}
+.masthead-deck {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 300;
+  color: var(--cream-dim);
+  max-width: 600px;
+  line-height: 1.7;
+  border-left: 3px solid var(--gold);
+  padding-left: 20px;
+  margin-bottom: 32px;
+}
+.masthead-meta {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+.meta-item { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px; }
+.meta-label { color: var(--muted); display: block; margin-bottom: 3px; }
+.meta-value { color: var(--gold-light); font-size: 13px; }
+
+/* ─── DISCLAIMER ─── */
+.disclaimer {
+  background: rgba(217,64,64,0.08);
+  border-top: 1px solid rgba(217,64,64,0.3);
+  border-bottom: 1px solid rgba(217,64,64,0.3);
+  padding: 12px 56px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: rgba(217,64,64,0.8);
+  letter-spacing: 0.5px;
+}
+
+/* ─── LAYOUT ─── */
+.page { padding: 64px 56px; }
+.page + .page { padding-top: 0; }
+
+.col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.col3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; }
+.col4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+
+.section-rule {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 40px;
+  margin-top: 64px;
+}
+.section-rule:first-child { margin-top: 0; }
+.rule-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 5px;
+  color: var(--gold);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rule-line { flex: 1; height: 1px; background: var(--border); }
+.rule-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 11px;
+  color: var(--gold-dim);
+}
+
+/* ─── PRICE SCOREBOARD ─── */
+.scoreboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  margin-bottom: 2px;
+}
+.score-card {
+  background: var(--ink2);
+  padding: 28px 24px;
+}
+.score-asset {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.score-price {
+  font-family: 'Playfair Display', serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.score-card.gold-card .score-price { color: var(--gold-light); }
+.score-card.oil-card .score-price { color: var(--oil-light); }
+.score-card.neutral .score-price { color: var(--cream); }
+.score-change {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.up { color: var(--oil-light); }
+.down { color: var(--red); }
+.score-forecast {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.score-forecast strong { color: var(--gold); }
+
+/* ─── ANALYST CARDS ─── */
+.analyst-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.analyst-card {
+  background: var(--ink2);
+  padding: 28px;
+  border-top: 2px solid var(--border-strong);
+  position: relative;
+}
+.analyst-card.gold-analyst { border-top-color: var(--gold); }
+.analyst-card.oil-analyst { border-top-color: var(--oil-light); }
+.analyst-card.bear-analyst { border-top-color: var(--red); }
+.analyst-name {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.analyst-firm {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--gold-dim);
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.analyst-target {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.analyst-card.gold-analyst .analyst-target { color: var(--gold-light); }
+.analyst-card.oil-analyst .analyst-target { color: var(--oil-light); }
+.analyst-card.bear-analyst .analyst-target { color: var(--red); }
+.analyst-quote {
+  font-size: 13px;
+  color: var(--cream-dim);
+  line-height: 1.6;
+  font-style: italic;
+  border-left: 2px solid var(--border-strong);
+  padding-left: 14px;
+}
+.analyst-quote.gold-q { border-left-color: var(--gold-dim); }
+.analyst-quote.oil-q { border-left-color: var(--oil-dim); }
+
+/* ─── ASSET DEEP DIVES ─── */
+.asset-section {
+  display: grid;
+  grid-template-columns: 5fr 4fr;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.asset-main { background: var(--ink2); padding: 40px; }
+.asset-sidebar { background: var(--ink3); padding: 32px; }
+.asset-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.asset-eyebrow.gold { color: var(--gold); }
+.asset-eyebrow.oil { color: var(--oil-light); }
+.eyebrow-bar { flex: 1; height: 1px; }
+.eyebrow-bar.gold { background: var(--gold-dim); }
+.eyebrow-bar.oil { background: var(--oil-dim); }
+h2.asset-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+h2.asset-title.gold { color: var(--gold-light); }
+h2.asset-title.oil { color: var(--oil-light); }
+.asset-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 24px;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 1px;
+}
+.asset-body {
+  font-size: 14px;
+  color: var(--cream-dim);
+  line-height: 1.75;
+  margin-bottom: 24px;
+}
+.asset-body strong { color: var(--cream); font-weight: 600; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-label { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 1px; }
+.stat-value { font-weight: 500; }
+.stat-value.gold { color: var(--gold-light); }
+.stat-value.oil { color: var(--oil-light); }
+.stat-value.red { color: var(--red); }
+
+.sidebar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.sidebar-item:last-child { border-bottom: none; }
+.sidebar-item-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.sidebar-item-val { color: var(--cream); font-weight: 500; }
+.sidebar-item-val.gold { color: var(--gold-light); }
+.sidebar-item-val.oil { color: var(--oil-light); }
+.sidebar-item-val.green { color: var(--oil-light); }
+.sidebar-item-val.red { color: var(--red); }
+
+/* ─── STEPS ─── */
+.steps-wrapper { display: flex; flex-direction: column; gap: 1px; }
+.step-block {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 0;
+  background: var(--ink2);
+  overflow: hidden;
+  transition: background 0.2s;
+}
+.step-block:hover { background: var(--ink3); }
+.step-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 28px 0;
+  border-right: 1px solid var(--border);
+}
+.step-num-large {
+  font-family: 'Playfair Display', serif;
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.15;
+  color: var(--cream);
+}
+.step-connector {
+  flex: 1;
+  width: 1px;
+  background: var(--border);
+  margin-top: 8px;
+}
+.step-block:last-child .step-connector { display: none; }
+.step-content { padding: 28px 36px; }
+.step-timing {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--gold);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.step-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cream);
+  margin-bottom: 14px;
+}
+.step-body { font-size: 14px; color: var(--cream-dim); line-height: 1.75; }
+.step-body strong { color: var(--cream); }
+.step-body .action-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  background: rgba(201,168,76,0.04);
+  border-left: 2px solid var(--gold-dim);
+  font-size: 13px;
+}
+.step-body .action-line.oil-line {
+  background: rgba(61,186,135,0.04);
+  border-left-color: var(--oil-dim);
+}
+.action-icon { flex-shrink: 0; font-size: 14px; }
+.step-body .alert-box {
+  background: rgba(217,64,64,0.06);
+  border: 1px solid rgba(217,64,64,0.2);
+  border-radius: 3px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(217,64,64,0.9);
+}
+.step-body .tip-box {
+  background: rgba(201,168,76,0.06);
+  border: 1px solid rgba(201,168,76,0.2);
+  border-radius: 3px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(201,168,76,0.9);
+}
+
+/* ─── TRADE SPECS ─── */
+.trade-spec-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.trade-spec {
+  background: var(--ink2);
+  padding: 36px;
+  position: relative;
+  overflow: hidden;
+}
+.trade-spec::before {
+  content: attr(data-asset);
+  position: absolute;
+  right: -10px;
+  bottom: -20px;
+  font-family: 'Playfair Display', serif;
+  font-size: 100px;
+  font-weight: 900;
+  opacity: 0.03;
+  color: var(--cream);
+  line-height: 1;
+  pointer-events: none;
+}
+.trade-spec.gold-spec { border-left: 3px solid var(--gold); }
+.trade-spec.oil-spec { border-left: 3px solid var(--oil-light); }
+.spec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.spec-asset-name {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 4px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.spec-instrument {
+  font-family: 'Playfair Display', serif;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1;
+}
+.trade-spec.gold-spec .spec-instrument { color: var(--gold-light); }
+.trade-spec.oil-spec .spec-instrument { color: var(--oil-light); }
+.spec-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border: 1px solid;
+  text-transform: uppercase;
+}
+.gold-badge { border-color: var(--gold-dim); color: var(--gold); }
+.oil-badge { border-color: var(--oil-dim); color: var(--oil-light); }
+.spec-rows { }
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.spec-row:last-child { border-bottom: none; }
+.spec-row-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.spec-row-val { font-weight: 500; }
+.spec-row-val.gold { color: var(--gold-light); }
+.spec-row-val.green { color: var(--oil-light); }
+.spec-row-val.red { color: var(--red); }
+.spec-row-val.white { color: var(--cream); }
+
+/* ─── SCENARIOS ─── */
+.scenario-bar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.scenario-col { background: var(--ink2); padding: 32px; }
+.scenario-col.bull { border-top: 2px solid var(--oil-light); }
+.scenario-col.base { border-top: 2px solid var(--gold); }
+.scenario-col.bear { border-top: 2px solid var(--red); }
+.scenario-type {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+.scenario-col.bull .scenario-type { color: var(--oil-light); }
+.scenario-col.base .scenario-type { color: var(--gold); }
+.scenario-col.bear .scenario-type { color: var(--red); }
+.scenario-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cream);
+  margin-bottom: 14px;
+}
+.scenario-trigger {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 16px;
+  padding: 10px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 2px;
+  font-style: italic;
+}
+.scenario-outcomes { }
+.so-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.so-row:last-child { border-bottom: none; }
+.so-asset { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; }
+.so-val { font-weight: 600; }
+.scenario-col.bull .so-val { color: var(--oil-light); }
+.scenario-col.base .so-val { color: var(--gold-light); }
+.scenario-col.bear .so-val { color: var(--red); }
+.probability-bar {
+  margin-top: 16px;
+  height: 4px;
+  background: var(--ink3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.prob-fill { height: 100%; border-radius: 2px; }
+.scenario-col.bull .prob-fill { background: var(--oil-light); width: 30%; }
+.scenario-col.base .prob-fill { background: var(--gold); width: 50%; }
+.scenario-col.bear .prob-fill { background: var(--red); width: 20%; }
+.prob-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ─── RULES ─── */
+.rules-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+}
+.rule-card {
+  background: var(--ink2);
+  padding: 28px;
+}
+.rule-number {
+  font-family: 'Playfair Display', serif;
+  font-size: 60px;
+  font-weight: 900;
+  color: rgba(201,168,76,0.08);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.rule-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold-light);
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+.rule-body { font-size: 13px; color: var(--cream-dim); line-height: 1.65; }
+
+/* ─── PLATFORM COMPARISON ─── */
+.platform-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.platform-table th {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-strong);
+  text-align: left;
+  background: var(--ink2);
+  text-transform: uppercase;
+}
+.platform-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  background: var(--ink);
+}
+.platform-table tr:hover td { background: var(--ink2); }
+.platform-table td:first-child {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cream);
+}
+.rec-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+  padding: 2px 7px;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  display: inline-block;
+  margin-top: 4px;
+}
+.check { color: var(--oil-light); font-weight: 700; }
+.cross { color: var(--red); }
+.neutral-val { color: var(--muted); }
+
+/* ─── TIMELINE FINAL ─── */
+.timeline-strip {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 1px;
+  background: var(--border);
+  margin-bottom: 2px;
+}
+.tl-col {
+  background: var(--ink2);
+  padding: 20px 16px;
+}
+.tl-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin-bottom: 8px;
+  display: block;
+}
+.tl-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cream);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+.tl-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.tl-col.active { background: rgba(201,168,76,0.06); border-top: 2px solid var(--gold); }
+
+/* ─── FOOTER ─── */
+footer {
+  background: var(--ink2);
+  border-top: 1px solid var(--border-strong);
+  padding: 24px 56px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.footer-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.footer-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  line-height: 1.8;
+}
+
+@media (max-width: 1000px) {
+  .masthead-hero, .page { padding-left: 24px; padding-right: 24px; }
+  .masthead-top { padding: 12px 24px; }
+  .disclaimer { padding: 12px 24px; }
+  footer { padding: 20px 24px; }
+  .scoreboard, .col2, .col3, .col4, .analyst-grid,
+  .asset-section, .trade-spec-grid, .scenario-bar-grid,
+  .rules-grid, .timeline-strip { grid-template-columns: 1fr; }
+  .step-block { grid-template-columns: 60px 1fr; }
+  .masthead-hero::before { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<div class="masthead">
+  <div class="masthead-ticker">
+    <div class="ticker-inner">
+      XAU/USD $5,292 ▲ +2.7% &nbsp;|&nbsp; WTI CRUDE +10% $80/BBL OTC &nbsp;|&nbsp; BRENT CRUDE $80 OTC +10% &nbsp;|&nbsp; GOLD TARGET WEEK: $5,496 — COINCODEX &nbsp;|&nbsp; BRENT TARGET: $100+ — BARCLAYS &nbsp;|&nbsp; HORMUZ SHIPPING HALTED — RYSTAD ENERGY &nbsp;|&nbsp; KHAMENEI CONFIRMED DEAD — MULTIPLE SOURCES &nbsp;|&nbsp; TRUMP: "OPERATIONS CONTINUE UNTIL ALL OBJECTIVES MET" &nbsp;|&nbsp; XAU/USD $5,292 ▲ +2.7% &nbsp;|&nbsp; WTI CRUDE +10% $80/BBL OTC &nbsp;|&nbsp; BRENT CRUDE $80 OTC +10% &nbsp;|&nbsp; GOLD TARGET WEEK: $5,496 — COINCODEX &nbsp;|&nbsp; BRENT TARGET: $100+ — BARCLAYS &nbsp;|&nbsp; HORMUZ SHIPPING HALTED — RYSTAD ENERGY &nbsp;|&nbsp;
+    </div>
+  </div>
+  <div class="masthead-top">
+    <span>THE EUROPEAN TRADING REPORT</span>
+    <span class="edition-badge">WAR EDITION</span>
+    <span>SUNDAY MARCH 1, 2026 — MARKET OPENS IN ~12 HOURS</span>
+  </div>
+  <div class="masthead-hero">
+    <div class="issue-label"><div class="live-dot"></div>LIVE MARKET BRIEF · GOLD & OIL FOCUS · EUROPEAN CFD EDITION</div>
+    <h1 class="masthead-title">The <em>Gold & Oil</em><br>War Trade:<br>Your Complete<br>Monday Playbook</h1>
+    <p class="masthead-deck">Compiled from 12+ leading market analysts, live OTC data, and European CFD trading mechanics — everything you need to act from the moment markets open at 9:30 AM CET tomorrow morning.</p>
+    <div class="masthead-meta">
+      <div class="meta-item"><span class="meta-label">GOLD SPOT NOW</span><span class="meta-value">$5,292.66 / OZ</span></div>
+      <div class="meta-item"><span class="meta-label">BRENT OTC NOW</span><span class="meta-value">~$80 / BBL ▲10%</span></div>
+      <div class="meta-item"><span class="meta-label">HORMUZ STATUS</span><span class="meta-value" style="color:var(--red)">SHIPPING HALTED</span></div>
+      <div class="meta-item"><span class="meta-label">YOUR PLATFORM</span><span class="meta-value">XTB / PEPPERSTONE</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="disclaimer">
+  ⚠ RISK WARNING: CFD trading involves significant risk of loss. 70-71% of retail CFD accounts lose money. This document is for educational purposes only and does not constitute financial advice. Never invest more than you can afford to lose entirely. Leverage amplifies both gains and losses. Negative balance protection applies to EU retail accounts.
+</div>
+
+<div class="page">
+
+  <!-- SECTION 1: LIVE SCOREBOARD -->
+  <div class="section-rule">
+    <span class="rule-label">Market Snapshot</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">I</span>
+  </div>
+
+  <div class="scoreboard" style="margin-bottom:48px;">
+    <div class="score-card gold-card">
+      <div class="score-asset">GOLD SPOT · XAU/USD</div>
+      <div class="score-price">$5,292</div>
+      <div class="score-change up">▲ +1.75% · +$91 TODAY</div>
+      <div class="score-forecast">Mon open target: <strong>$5,340–$5,450</strong></div>
+    </div>
+    <div class="score-card oil-card">
+      <div class="score-asset">BRENT CRUDE · OTC</div>
+      <div class="score-price">~$80</div>
+      <div class="score-change up">▲ +10% OVER WEEKEND OTC</div>
+      <div class="score-forecast">Mon open target: <strong>$85–$100+</strong></div>
+    </div>
+    <div class="score-card oil-card">
+      <div class="score-asset">WTI CRUDE · OTC</div>
+      <div class="score-price">~$75</div>
+      <div class="score-change up">▲ +8-10% WEEKEND MOVE</div>
+      <div class="score-forecast">Mon open target: <strong>$78–$95</strong></div>
+    </div>
+    <div class="score-card neutral">
+      <div class="score-asset">SILVER · XAG/USD</div>
+      <div class="score-price">$93+</div>
+      <div class="score-change up">▲ +7.67% WEEKEND</div>
+      <div class="score-forecast">Mon open target: <strong>$96–$105</strong></div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: ANALYST CONSENSUS -->
+  <div class="section-rule">
+    <span class="rule-label">Expert Consensus</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">II</span>
+  </div>
+
+  <div class="analyst-grid" style="margin-bottom:48px;">
+    <div class="analyst-card gold-analyst">
+      <div class="analyst-name">IBRAHIM ASSUAIBI</div>
+      <div class="analyst-firm">DIR. — PT TRAZE ANDALAN FUTURES</div>
+      <div class="analyst-target">$5,440</div>
+      <div class="analyst-quote gold-q">"The war in the Middle East is likely to continue in the short and medium term — this will have a positive impact on the global gold price." Gold will reach $5,500 next week.</div>
+    </div>
+    <div class="analyst-card gold-analyst">
+      <div class="analyst-name">PHILLIP STREIBLE</div>
+      <div class="analyst-firm">CHIEF MARKET STRATEGIST — BLUE LINE FUTURES</div>
+      <div class="analyst-target">$5,450</div>
+      <div class="analyst-quote gold-q">Near-term target $5,450 with support around $5,120. All-time high around $5,340 will likely fall at Sunday night reopen or early Monday. Medium-term target: $8,000.</div>
+    </div>
+    <div class="analyst-card gold-analyst">
+      <div class="analyst-name">AG THORSON</div>
+      <div class="analyst-firm">TECHNICAL ANALYST — GOLDPREDICT.COM</div>
+      <div class="analyst-target">$5,608</div>
+      <div class="analyst-quote gold-q">Gold futures technical targets for the upside run as high as $5,608 if bullish momentum holds through next week. Q2 2026 parabolic phase peak targeting $8,000 — comparable to 1979 blow-off.</div>
+    </div>
+    <div class="analyst-card oil-analyst">
+      <div class="analyst-name">AJAY PARMAR</div>
+      <div class="analyst-firm">DIRECTOR ENERGY — ICIS</div>
+      <div class="analyst-target">$100+</div>
+      <div class="analyst-quote oil-q">"We expect prices to open much closer to $100 a barrel and perhaps exceed that level if we see a prolonged outage of the Strait." Key factor: closure of the Strait of Hormuz.</div>
+    </div>
+    <div class="analyst-card oil-analyst">
+      <div class="analyst-name">AMARPREET SINGH</div>
+      <div class="analyst-firm">ANALYST — BARCLAYS</div>
+      <div class="analyst-target">$100</div>
+      <div class="analyst-quote oil-q">"How this ends is extremely uncertain at this point but in the meantime oil markets will have to face their worst fears." Brent could hit $100 per barrel when trading starts Monday.</div>
+    </div>
+    <div class="analyst-card oil-analyst">
+      <div class="analyst-name">SAMER HASN</div>
+      <div class="analyst-firm">SR. MARKET ANALYST — XS.COM</div>
+      <div class="analyst-target">$80+ GAP</div>
+      <div class="analyst-quote oil-q">"I believe we are likely to see a very wide gap in the energy market opening tomorrow. I do not expect the opening gap to be less than a 3% increase for both benchmarks."</div>
+    </div>
+    <div class="analyst-card oil-analyst">
+      <div class="analyst-name">MATT SMITH</div>
+      <div class="analyst-firm">OIL ANALYST — KPLER</div>
+      <div class="analyst-target">HALTED</div>
+      <div class="analyst-quote oil-q">"Tankers are starting to build by the Strait of Hormuz, but nothing seems to be going through at the moment — tankers are definitely spooked." Over 14M bbls/day at risk.</div>
+    </div>
+    <div class="analyst-card oil-analyst">
+      <div class="analyst-name">UBS ANALYSTS</div>
+      <div class="analyst-firm">HENRI PATRICOT ET AL — UBS</div>
+      <div class="analyst-target">$95–$120</div>
+      <div class="analyst-quote oil-q">"It is possible the market is looking at a material disruption that sends Brent spot prices above $120 per barrel." Hormuz reopening pace is the key variable to watch.</div>
+    </div>
+    <div class="analyst-card bear-analyst">
+      <div class="analyst-name">VANDANA HARI</div>
+      <div class="analyst-firm">CEO — VANDA INSIGHTS</div>
+      <div class="analyst-target">$80 FLOOR</div>
+      <div class="analyst-quote oil-q">"Oil prices will see an initial spike when the market opens. If the war carries on for days with full Iranian retaliation, we are looking at the worst-case scenarios." Ceasefire risk remains.</div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: GOLD DEEP DIVE -->
+  <div class="section-rule">
+    <span class="rule-label">Asset Deep Dive — Gold</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">III</span>
+  </div>
+
+  <div class="asset-section" style="margin-bottom:2px;">
+    <div class="asset-main">
+      <div class="asset-eyebrow gold">THE PREMIER SAFE HAVEN <div class="eyebrow-bar gold"></div></div>
+      <h2 class="asset-title gold">GOLD</h2>
+      <div class="asset-sub">XAU/USD · CFD LONG · XAUEUR AVAILABLE ON EU PLATFORMS</div>
+      <div class="asset-body">
+        <p>Gold entered Monday's session as the single most powerful trade on the board. <strong>The metal has gained 22% year-to-date in 2026</strong> — even before this weekend's events — representing its longest winning streak in over a decade. The Iran war is not introducing a new bull run: it is <em>detonating one that was already fully loaded.</em></p>
+        <br>
+        <p>The structural setup is extraordinary. <strong>Central banks globally bought 863 tonnes of gold in 2025</strong> and are on pace for similar volumes in 2026. Chinese net gold imports via Hong Kong jumped 68.7% in January. Goldman Sachs has revised its entire 2026 gold outlook higher. The 10-year U.S. Treasury yield has dropped to a three-month low at 3.961%, with approximately 42% probability now priced into June Fed rate cuts — lower real yields reduce the opportunity cost of holding gold, amplifying the war premium on top of the macro premium.</p>
+        <br>
+        <p>The weekend's events transformed an already bullish market into what analysts are calling <strong>"a full-blown safe-haven stampede."</strong> Gold futures surged over 2% on Saturday's session, pushing from $5,100 to over $5,300. The all-time high of $5,595.42 set on January 29, 2026 — previously viewed as major resistance — is now a near-term target rather than a ceiling.</p>
+      </div>
+      <div class="stat-row"><span class="stat-label">CURRENT SPOT PRICE</span><span class="stat-value gold">$5,292.66 / oz</span></div>
+      <div class="stat-row"><span class="stat-label">ALL-TIME HIGH</span><span class="stat-value gold">$5,595.42 (Jan 29, 2026)</span></div>
+      <div class="stat-row"><span class="stat-label">WEEK TARGET (COINCODEX ALGO)</span><span class="stat-value gold">$5,496.37 by Mar 7</span></div>
+      <div class="stat-row"><span class="stat-label">MEDIUM-TERM TARGET</span><span class="stat-value gold">$5,500–$5,608</span></div>
+      <div class="stat-row"><span class="stat-label">BLUE LINE FUTURES TARGET</span><span class="stat-value gold">$5,450 near-term</span></div>
+      <div class="stat-row"><span class="stat-label">SILVER (HIGH-BETA COUSIN)</span><span class="stat-value gold">$93+ oz · Target $100</span></div>
+      <div class="stat-row"><span class="stat-label">KEY SUPPORT LEVEL (DO NOT EXIT ABOVE)</span><span class="stat-value">$5,120–$5,143</span></div>
+      <div class="stat-row"><span class="stat-label">2026 YTD RETURN</span><span class="stat-value gold">+22%</span></div>
+    </div>
+    <div class="asset-sidebar">
+      <div class="sidebar-label">GOLD CFD TRADE SPECS — EUROPEAN</div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">INSTRUMENT ON XTB / PEPPERSTONE</div>
+        <div class="sidebar-item-val gold">GOLD (XAU/USD) CFD</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">DIRECTION</div>
+        <div class="sidebar-item-val green">LONG (BUY)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">EU RETAIL LEVERAGE (MAX)</div>
+        <div class="sidebar-item-val gold">1:20 (XTB) · Up to 1:200 (Pepperstone Pro)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">MARGIN REQUIRED AT 1:20 LEVERAGE</div>
+        <div class="sidebar-item-val">5% of position = €264 per oz exposed</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">€500 CAPITAL EXPOSURE AT 1:20</div>
+        <div class="sidebar-item-val gold">€10,000 of gold exposure</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">PEPPERSTONE GOLD SPREAD</div>
+        <div class="sidebar-item-val">From 0.1 pts · No commission</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">XTB GOLD SPREAD</div>
+        <div class="sidebar-item-val">From 0.008 pips</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">ENTRY PRICE (TARGET)</div>
+        <div class="sidebar-item-val gold">$5,280–$5,320 (Monday Open)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">TAKE PROFIT LEVEL 1</div>
+        <div class="sidebar-item-val green">$5,450 (+3%)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">TAKE PROFIT LEVEL 2</div>
+        <div class="sidebar-item-val green">$5,600 (+6%)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">STOP LOSS</div>
+        <div class="sidebar-item-val red">$5,100 (-3.6% from entry)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">OVERNIGHT SWAP COST (DAILY)</div>
+        <div class="sidebar-item-val">~0.007% of position value</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">IDEAL HOLD DURATION</div>
+        <div class="sidebar-item-val">3–10 trading days</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: OIL DEEP DIVE -->
+  <div class="section-rule">
+    <span class="rule-label">Asset Deep Dive — Oil</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">IV</span>
+  </div>
+
+  <div class="asset-section" style="margin-bottom:48px;">
+    <div class="asset-main">
+      <div class="asset-eyebrow oil">THE HORMUZ CHOKEPOINT PLAY <div class="eyebrow-bar oil"></div></div>
+      <h2 class="asset-title oil">OIL</h2>
+      <div class="asset-sub">BRENT CRUDE / WTI CFD · EUROPEAN PLATFORMS</div>
+      <div class="asset-body">
+        <p>Oil is the highest-upside, highest-volatility trade of this entire event. The core thesis is simple and devastating: <strong>the Strait of Hormuz, through which 20% of the world's daily oil supply passes, has effectively ceased to function as a shipping corridor.</strong> Tanker traffic has halted. Major oil majors and trading houses have already suspended shipments. This is not a theoretical risk — it is happening right now, tonight, before markets even open.</p>
+        <br>
+        <p>Rystad Energy has confirmed that tanker traffic has effectively stopped. Kpler's Matt Smith reports tankers are building up at the mouth of the Strait but not passing through. If that situation persists into Monday's trading session, <strong>Ajay Parmar of ICIS says we will open "much closer to $100 per barrel."</strong> Barclays' Amarpreet Singh agrees, placing $100 as the opening baseline. UBS goes further, modeling $120 if disruption is sustained.</p>
+        <br>
+        <p>The worst-case scenario — attack on Saudi oil infrastructure followed by complete Strait closure — <strong>would remove 8–10 million barrels per day from global supply even with pipeline bypasses.</strong> SEB Commodities' analysts have modeled $150 Brent in that scenario. For context, Brent closed Friday at $73.21. That is a potential doubling of the oil price from a single weekend's events.</p>
+        <br>
+        <p>The critical risk: OPEC+ met Sunday and agreed to raise output by 206,000 barrels per day from April — a modest increase representing less than 0.2% of global demand. This is <strong>not enough to offset Hormuz disruption</strong> and will barely cap the spike. Watch it as a negative catalyst only if the Strait reopens simultaneously.</p>
+      </div>
+      <div class="stat-row"><span class="stat-label">BRENT FRIDAY CLOSE</span><span class="stat-value oil">$73.21 / bbl</span></div>
+      <div class="stat-row"><span class="stat-label">BRENT OTC SUNDAY NIGHT</span><span class="stat-value oil">~$80 / bbl ▲ +10%</span></div>
+      <div class="stat-row"><span class="stat-label">BARCLAYS MONDAY OPEN TARGET</span><span class="stat-value oil">$100 / bbl</span></div>
+      <div class="stat-row"><span class="stat-label">UBS SUSTAINED DISRUPTION TARGET</span><span class="stat-value oil">$95–$120 / bbl</span></div>
+      <div class="stat-row"><span class="stat-label">SEB WORST-CASE (HORMUZ CLOSED)</span><span class="stat-value oil">$150 / bbl</span></div>
+      <div class="stat-row"><span class="stat-label">HORMUZ DAILY FLOW (KPLER)</span><span class="stat-value">14M+ barrels / day · NOW HALTED</span></div>
+      <div class="stat-row"><span class="stat-label">OPEC+ PRODUCTION INCREASE (APR)</span><span class="stat-value red">206,000 bpd — insufficient offset</span></div>
+      <div class="stat-row"><span class="stat-label">LIPOW WORST-CASE PROBABILITY</span><span class="stat-value">33% — $10–$20 spike scenario</span></div>
+    </div>
+    <div class="asset-sidebar">
+      <div class="sidebar-label">OIL CFD TRADE SPECS — EUROPEAN</div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">INSTRUMENT ON XTB / PEPPERSTONE</div>
+        <div class="sidebar-item-val oil">OIL.WTI / UKOIL (BRENT) CFD</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">DIRECTION</div>
+        <div class="sidebar-item-val green">LONG (BUY)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">EU RETAIL LEVERAGE (OIL)</div>
+        <div class="sidebar-item-val oil">1:10 (commodity)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">MARGIN REQUIRED AT 1:10</div>
+        <div class="sidebar-item-val">10% of position size</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">€500 CAPITAL EXPOSURE AT 1:10</div>
+        <div class="sidebar-item-val oil">€5,000 of oil exposure</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">PEPPERSTONE OIL SPREAD</div>
+        <div class="sidebar-item-val">From 0.02 pts · No commission</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">BRENT ENTRY (TARGET)</div>
+        <div class="sidebar-item-val oil">$80–$87 (Mon open or pullback)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">WTI ENTRY (TARGET)</div>
+        <div class="sidebar-item-val oil">$75–$82 (Mon open or pullback)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">TAKE PROFIT LEVEL 1</div>
+        <div class="sidebar-item-val green">$95 Brent / $90 WTI</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">TAKE PROFIT LEVEL 2</div>
+        <div class="sidebar-item-val green">$110 Brent / $103 WTI</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">STOP LOSS</div>
+        <div class="sidebar-item-val red">$74 Brent / $69 WTI (8% below entry)</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">CEASEFIRE = INSTANT EXIT</div>
+        <div class="sidebar-item-val red">OIL -15% IN MINUTES ON NEWS</div>
+      </div>
+      <div class="sidebar-item">
+        <div class="sidebar-item-label">IDEAL HOLD DURATION</div>
+        <div class="sidebar-item-val">1–7 trading days MAX</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: PLATFORM CHOICE -->
+  <div class="section-rule">
+    <span class="rule-label">Platform Selection</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">V</span>
+  </div>
+
+  <table class="platform-table" style="margin-bottom:48px;">
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Gold Leverage</th>
+        <th>Oil Leverage</th>
+        <th>Spreads</th>
+        <th>Account Open Speed</th>
+        <th>Best For</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>XTB<br><span class="rec-badge">TOP PICK</span></td>
+        <td><span class="check">1:20 retail</span></td>
+        <td><span class="check">1:10 retail</span></td>
+        <td class="neutral-val">Gold 0.008 pips · Oil 0.02</td>
+        <td><span class="check">Hours · 24/7 support</span></td>
+        <td>Best overall. 0% commission up to €100k/mo. xStation 5 platform. Gold + oil + stocks all in one.</td>
+      </tr>
+      <tr>
+        <td>Pepperstone<br><span class="rec-badge">BEST SPREADS</span></td>
+        <td><span class="check">1:20 retail · 1:200 pro</span></td>
+        <td><span class="check">1:10 retail</span></td>
+        <td class="neutral-val">Gold 0.1 pts · Oil 0.02</td>
+        <td><span class="check">Fast · MT4/MT5/TradingView</span></td>
+        <td>Best for oil trading specifically. Tightest oil spreads. Supports TradingView natively. 830,000+ clients.</td>
+      </tr>
+      <tr>
+        <td>IBKR Europe</td>
+        <td><span class="neutral-val">1:20 retail</span></td>
+        <td><span class="neutral-val">1:10 retail</span></td>
+        <td class="neutral-val">Lowest commissions</td>
+        <td><span class="cross">1–3 days — TOO SLOW</span></td>
+        <td>Best long-term but too slow to open tonight for Monday's trade.</td>
+      </tr>
+      <tr>
+        <td>Capital.com</td>
+        <td><span class="neutral-val">1:20 retail</span></td>
+        <td><span class="neutral-val">1:10 retail</span></td>
+        <td class="neutral-val">Competitive</td>
+        <td><span class="check">Fast</span></td>
+        <td>Good for beginners. AI-assisted risk tools. Good fallback if XTB/Pepperstone are busy tonight.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 6: STEP BY STEP PROCEDURE -->
+  <div class="section-rule">
+    <span class="rule-label">Step-by-Step Procedure</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">VI</span>
+  </div>
+
+  <div class="steps-wrapper" style="margin-bottom:48px;">
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">01</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">TONIGHT — SUNDAY MAR 1 — RIGHT NOW</div>
+        <div class="step-title">Open & Fund Your Account on XTB or Pepperstone</div>
+        <div class="step-body">
+          <div class="action-line"><span class="action-icon">→</span><span>Go to <strong>xtb.com</strong> or <strong>pepperstone.com</strong> right now. Click "Open Account." The entire application takes 10–15 minutes. Have your passport/ID and proof of address (utility bill or bank statement) ready to photograph with your phone.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span>Select <strong>"Retail Client"</strong> account type. Answer the suitability questions honestly — you need to demonstrate basic knowledge of CFDs and leverage to be approved. Do not lie but do answer confidently.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span>Deposit your capital via <strong>credit/debit card (instant)</strong> or bank transfer. Credit/debit card funding on XTB and Pepperstone is typically instant or within 30 minutes. Do not use bank transfer — it will take 1 day and you'll miss the open. Minimum deposit is usually €100.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span>Download the <strong>XTB xStation 5 app</strong> (iOS/Android) or the <strong>Pepperstone app / MT5</strong>. Log in and confirm your balance appears. You are ready.</span></div>
+          <div class="tip-box">💡 PRO TIP: While you wait for account approval, open a <strong>free demo account</strong> on the same platform. Practice placing a gold CFD long position on the demo so your hands know exactly what to press tomorrow morning. Muscle memory matters when you're nervous.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">02</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">TONIGHT — 10:00 PM to MIDNIGHT CET</div>
+        <div class="step-title">Monitor the OTC Signals — Your Pre-Market Intelligence</div>
+        <div class="step-body">
+          <div class="action-line"><span class="action-icon">→</span><span><strong>Watch gold spot price</strong> on TradingView (free — tradingview.com, search XAUUSD). Gold is already at $5,292. If it rises above $5,340 tonight, your entry tomorrow will be slightly higher — plan accordingly. If it dips below $5,200, that is your ideal entry zone tomorrow.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">→</span><span><strong>Watch Brent crude OTC</strong> on investing.com (search "Brent Oil"). It's already trading ~$80 OTC. The Monday morning open for CME/ICE futures happens at <strong>1:00 AM CET</strong> Sunday night. The first futures print will tell you the official confirmed oil move.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">→</span><span><strong>Read Reuters, Bloomberg, Al Jazeera</strong> for any ceasefire signals. Trump said Sunday that Iran wants to talk. This is the biggest risk to your oil trade. Any concrete Oman-brokered talks = reduce oil position plan by 50%. Confirmed ceasefire = stand down entirely.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span>At <strong>midnight CET</strong>, lock in your trade plan: What is your entry price range for gold? What is your entry range for oil? How many lots on each? What is your exact stop loss? Write these down. Do not trade from improvisation.</span></div>
+          <div class="alert-box">⚠ CEASEFIRE ALERT: Trump confirmed Sunday that Iran wants to talk and he has agreed to do so. This introduces meaningful de-escalation risk. Watch Oman FM statements. If a ceasefire is announced before Monday open, do NOT enter the oil trade. Gold will still hold value but oil will collapse.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">03</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">MONDAY MAR 2 — 7:00 AM CET — EARLY MORNING</div>
+        <div class="step-title">Pre-Market Final Check — Go or No-Go Decision</div>
+        <div class="step-body">
+          At 7:00 AM CET (1 hour before European cash markets begin moving and 2.5 hours before full opening), run your final three-question check:
+          <div class="action-line"><span class="action-icon">✓</span><span><strong>Is Brent crude above $78/bbl?</strong> If YES → oil trade is ON. If below $75 (surprise de-escalation or OPEC flood) → reduce oil position by 50% or stand down.</span></div>
+          <div class="action-line"><span class="action-icon">✓</span><span><strong>Is gold above $5,250?</strong> If YES → gold trade is ON at current or better levels. If below $5,150 (shock de-escalation, strong dollar) → reduce gold position by 30%.</span></div>
+          <div class="action-line"><span class="action-icon">✓</span><span><strong>Any confirmed ceasefire news?</strong> Scan Reuters breaking news. If YES to ceasefire → do NOT trade oil. Gold may still hold. Stand down on oil completely.</span></div>
+          <div class="tip-box">💡 If all three checks pass: FULL GREEN LIGHT. Open your platform, have your positions sized and ready to execute at 9:30 AM CET (European market pre-open) or 10:30 AM CET after the first 30-minute volatility flush.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">04</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">MONDAY MAR 2 — 9:30 AM CET — MARKET OPENS</div>
+        <div class="step-title">Position Sizing — Calculate Your Exact Lot Sizes</div>
+        <div class="step-body">
+          Before you click "Buy" on anything, calculate your position sizes. This is non-negotiable. Use this exact framework:
+          <div class="action-line"><span class="action-icon">→</span><span><strong>GOLD POSITION:</strong> Allocate 60% of your capital to gold (it's the lower risk of the two). On XTB with €1,000 capital: 60% = €600. At 1:20 leverage = €12,000 exposure. Gold at $5,300 = approximately 2.3 oz exposure. One standard lot on XTB gold = 100 oz. So you'd trade <strong>0.02–0.03 lots</strong> for a €600 margin position.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">→</span><span><strong>OIL POSITION:</strong> Allocate 30% to oil (higher risk, higher upside). On XTB with €1,000 capital: 30% = €300. At 1:10 leverage = €3,000 exposure. Brent at $82 = approximately 37 barrels exposure. One standard lot on XTB oil = 100 barrels. So you'd trade <strong>0.3–0.4 lots</strong> for a €300 margin position.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span><strong>CASH RESERVE:</strong> Keep 10% (€100) in cash. This is your reload ammunition or margin buffer if the trade moves against you briefly before recovering.</span></div>
+          <div class="tip-box">💡 RULE: If a single trade going fully against you (to your stop loss) would lose more than 15% of your total capital, you are over-sized. Reduce lot sizes until the worst-case loss is 10–15% of capital maximum.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">05</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">MONDAY MAR 2 — 10:00–10:30 AM CET — EXECUTION</div>
+        <div class="step-title">Enter Your Positions — Exact Execution Protocol</div>
+        <div class="step-body">
+          <strong>Do NOT enter at 9:30 AM CET open.</strong> The first 30 minutes will have the widest spreads and the most erratic price movement as algorithmic orders flood the market. Wait for the dust to settle. Your ideal window is <strong>10:00–10:30 AM CET.</strong>
+          <div class="action-line"><span class="action-icon">1.</span><span>Open XTB xStation or Pepperstone platform. Search <strong>"GOLD"</strong> or <strong>"XAUUSD."</strong> Confirm the current bid/ask. The spread on gold should be under $1 in normal conditions — during opening it may temporarily widen to $2–3, which is why you wait.</span></div>
+          <div class="action-line"><span class="action-icon">2.</span><span>Click <strong>"BUY"</strong> on gold. A trade ticket opens. Enter your lot size (e.g., 0.03 lots). Set <strong>Take Profit</strong> at $5,450. Set <strong>Stop Loss</strong> at $5,100. Review the margin requirement and confirm it matches your plan. Click <strong>OPEN TRADE.</strong></span></div>
+          <div class="action-line oil-line"><span class="action-icon">3.</span><span>Search <strong>"OIL.WTI"</strong> or <strong>"UKOIL"</strong> (Brent). Confirm the current price. Enter your oil position: Click <strong>"BUY."</strong> Set <strong>Take Profit 1</strong> at $95 (Brent) or $90 (WTI). Set <strong>Stop Loss</strong> at $74 (Brent) or $69 (WTI). Click <strong>OPEN TRADE.</strong></span></div>
+          <div class="action-line"><span class="action-icon">4.</span><span>Confirm both positions appear in your <strong>"Open Positions"</strong> panel. Note your exact entry prices. Screenshot it. These are your reference points for the entire trade.</span></div>
+          <div class="alert-box">⚠ IF THE OIL PRICE HAS ALREADY GAPPED TO $95+ AT OPEN: Do not chase. The risk/reward is no longer favorable at $95 if your stop is at $74. Either wait for a pullback to $87–90 to enter, or skip the oil trade entirely and go heavier on gold which has a cleaner continuation pattern.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">06</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">MONDAY 10:30 AM – FRIDAY 5:00 PM CET — HOLD PHASE</div>
+        <div class="step-title">Managing Open Positions — The Daily Discipline</div>
+        <div class="step-body">
+          <div class="action-line"><span class="action-icon">→</span><span><strong>Check once per hour, not every minute.</strong> Set price alerts on your platform: Gold alert at $5,450 (take profit trigger), Gold alert at $5,150 (near stop loss warning). Oil alert at $95 (profit target), Oil alert at $76 (stop loss warning).</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span><strong>Partial profit taking rule:</strong> When gold hits $5,400, close 50% of your gold position and let the other 50% run to $5,600. When oil hits $95, close 50% of your oil position and trail the stop on the remaining 50% up to $85.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span><strong>Overnight swap awareness:</strong> CFDs incur a small daily funding cost (swap fee) for every night you hold. On XTB and Pepperstone, gold and oil swaps are typically 0.005–0.01% of position value per night. On a €10,000 gold position, that's €0.50–€1.00 per night — negligible for a 3–10 day trade.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">→</span><span><strong>For oil specifically</strong> — watch for the <strong>U.S. EIA Petroleum Status Report</strong> (released Wednesday 4:30 PM CET). A surprise inventory drawdown will spike oil further. A surprise build could cause a brief pullback — do not panic if oil dips 2–3% on inventory day.</span></div>
+          <div class="tip-box">💡 The single most important daily action: Read the first Reuters/Bloomberg headline each morning. "Iran ceasefire" = exit oil immediately. "Strait of Hormuz reopens" = exit oil immediately. "New escalation / Saudi oil facilities struck" = hold and add.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">07</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">DAY 1–10 — WHENEVER TRIGGERED</div>
+        <div class="step-title">Exit Protocol — Closing Your Positions</div>
+        <div class="step-body">
+          <strong>HARD EXIT TRIGGERS — close the relevant position immediately when any of these occur:</strong>
+          <div class="action-line"><span class="action-icon">🔴</span><span><strong>CEASEFIRE ANNOUNCED</strong> → Close oil position within 5 minutes. Oil will drop $10–15 in under an hour. Gold will dip but recover — you can hold gold through a ceasefire but reduce position by 50%.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">🔴</span><span><strong>HORMUZ OFFICIALLY REOPENS</strong> → Close all oil immediately. The entire oil trade thesis collapses the moment tankers resume passage. Do not wait to "see what happens."</span></div>
+          <div class="action-line"><span class="action-icon">🟡</span><span><strong>GOLD HITS YOUR TAKE PROFIT ($5,450 / $5,600)</strong> → Close 50% at TP1, move stop loss to breakeven on remaining 50%, let it run to TP2. This guarantees you cannot lose money on the second half of the trade.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">🟡</span><span><strong>OIL HITS $95 BRENT</strong> → Close 50% immediately. Move stop loss on remaining 50% to $87 (trail it $5 below current price as oil rises). Close everything by end of Day 7 regardless of price.</span></div>
+          <div class="action-line"><span class="action-icon">⚫</span><span><strong>STOP LOSS HIT</strong> → Position automatically closes. Do not override your stop loss. Do not add to a losing position. Walk away, reassess, and re-enter only if the thesis is still intact.</span></div>
+          <div class="tip-box">💡 To close a position on XTB: Go to "Open Positions" → Find your trade → Click the X or "Close Position" button → Confirm. The profit/loss is instantly realized and added to your account balance.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <div class="step-gutter">
+        <div class="step-num-large">08</div>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step-content">
+        <div class="step-timing">DAYS 7–14 — MAXIMUM HOLD LIMIT</div>
+        <div class="step-title">Hard Deadline — Exit Everything By Day 14</div>
+        <div class="step-body">
+          <div class="action-line"><span class="action-icon">→</span><span>Geopolitical war premiums in oil historically deflate within 2 weeks even without a formal ceasefire, as markets begin to price in adaptation (alternative supply routes, SPR releases, demand destruction). After Day 14, the remaining upside diminishes and the swap costs begin to eat into returns.</span></div>
+          <div class="action-line"><span class="action-icon">→</span><span><strong>Gold exception:</strong> Gold's war premium lasts longer than oil's. If the conflict is ongoing and unresolved by Day 14, you may choose to hold a reduced gold position (25% of original size) as a longer-term structural play. But close 75% of gold by Day 14.</span></div>
+          <div class="action-line oil-line"><span class="action-icon">→</span><span><strong>Oil has a hard 7-day rule</strong> for this trade specifically — the Hormuz situation will either resolve (oil crashes) or entrench (oil stays elevated but stops moving up explosively). After 7 days, the easy money is made. Exit oil by Day 7 regardless.</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION 7: SCENARIOS -->
+  <div class="section-rule">
+    <span class="rule-label">Outcome Scenarios</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">VII</span>
+  </div>
+
+  <div class="scenario-bar-grid" style="margin-bottom:48px;">
+    <div class="scenario-col bull">
+      <div class="scenario-type">BULL SCENARIO</div>
+      <div class="scenario-name">Hormuz Stays Closed, Escalation Continues</div>
+      <div class="scenario-trigger">Trigger: Iranian retaliation strikes Saudi oil infrastructure. Hormuz shipping suspended for 5+ days. Trump confirms 2-week operation timeline.</div>
+      <div class="scenario-outcomes">
+        <div class="so-row"><span class="so-asset">GOLD</span><span class="so-val">$5,600–$5,800</span></div>
+        <div class="so-row"><span class="so-asset">BRENT</span><span class="so-val">$110–$130 / bbl</span></div>
+        <div class="so-row"><span class="so-asset">€1,000 GOLD CFD</span><span class="so-val">+€1,800–€3,200</span></div>
+        <div class="so-row"><span class="so-asset">€500 OIL CFD</span><span class="so-val">+€2,000–€4,000</span></div>
+        <div class="so-row"><span class="so-asset">TOTAL ON €1,500</span><span class="so-val">+200–500% return</span></div>
+      </div>
+      <div class="probability-bar"><div class="prob-fill"></div></div>
+      <div class="prob-label">PROBABILITY: ~30%</div>
+    </div>
+    <div class="scenario-col base">
+      <div class="scenario-type">BASE SCENARIO</div>
+      <div class="scenario-name">Conflict Sustained, Hormuz Disrupted But Not Closed</div>
+      <div class="scenario-trigger">Trigger: Ongoing airstrikes, limited tanker passage, Iran retaliating but not formally closing the Strait. Conflict lasts 7–14 days.</div>
+      <div class="scenario-outcomes">
+        <div class="so-row"><span class="so-asset">GOLD</span><span class="so-val">$5,400–$5,608</span></div>
+        <div class="so-row"><span class="so-asset">BRENT</span><span class="so-val">$90–$100 / bbl</span></div>
+        <div class="so-row"><span class="so-asset">€1,000 GOLD CFD</span><span class="so-val">+€600–€1,200</span></div>
+        <div class="so-row"><span class="so-asset">€500 OIL CFD</span><span class="so-val">+€700–€1,500</span></div>
+        <div class="so-row"><span class="so-asset">TOTAL ON €1,500</span><span class="so-val">+87–180% return</span></div>
+      </div>
+      <div class="probability-bar"><div class="prob-fill"></div></div>
+      <div class="prob-label">PROBABILITY: ~50%</div>
+    </div>
+    <div class="scenario-col bear">
+      <div class="scenario-type">BEAR SCENARIO</div>
+      <div class="scenario-name">Rapid Ceasefire — Trump-Iran Talks Succeed</div>
+      <div class="scenario-trigger">Trigger: Oman-brokered ceasefire within 48 hours. Hormuz reopens. Oil collapses. Gold partially holds but gives back war premium.</div>
+      <div class="scenario-outcomes">
+        <div class="so-row"><span class="so-asset">GOLD</span><span class="so-val">$5,100–$5,200</span></div>
+        <div class="so-row"><span class="so-asset">BRENT</span><span class="so-val">$70–$75 / bbl</span></div>
+        <div class="so-row"><span class="so-asset">€1,000 GOLD CFD</span><span class="so-val">-€200 to -€400</span></div>
+        <div class="so-row"><span class="so-asset">€500 OIL CFD</span><span class="so-val">-€300 to -€500 (SL triggers)</span></div>
+        <div class="so-row"><span class="so-asset">TOTAL ON €1,500</span><span class="so-val">-30 to -60% (SL contained)</span></div>
+      </div>
+      <div class="probability-bar"><div class="prob-fill"></div></div>
+      <div class="prob-label">PROBABILITY: ~20%</div>
+    </div>
+  </div>
+
+  <!-- SECTION 8: GOLDEN RULES -->
+  <div class="section-rule">
+    <span class="rule-label">The Non-Negotiable Rules</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">VIII</span>
+  </div>
+
+  <div class="rules-grid" style="margin-bottom:48px;">
+    <div class="rule-card">
+      <div class="rule-number">01</div>
+      <div class="rule-title">Gold Is Your Anchor, Oil Is Your Rocket</div>
+      <div class="rule-body">Gold has the cleaner technical setup — already trending, safe-haven momentum, 7-month win streak intact. Oil has the higher ceiling but crashes faster on de-escalation. Size gold larger (60%) and oil smaller (30%). Gold protects. Oil amplifies.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-number">02</div>
+      <div class="rule-title">Wait 30 Minutes After European Open</div>
+      <div class="rule-body">9:30–10:00 AM CET is the chaos window. Spreads widen. Price whipsaws. Algorithmic stops trigger. Professional traders do their damage in this window and then let the market settle. Enter at 10:00–10:30 AM CET on limit orders — you'll get a better fill every time.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-number">03</div>
+      <div class="rule-title">Set Your Stop Loss Before You Enter</div>
+      <div class="rule-body">On XTB and Pepperstone, you set your stop loss and take profit at the same moment you place the trade. Gold SL: $5,100. Brent SL: $74. Enter these values before you click buy. This means you cannot emotionally override them in the heat of a move against you.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-number">04</div>
+      <div class="rule-title">Ceasefire = Oil Exit in 5 Minutes</div>
+      <div class="rule-body">Oil drops $10–15 within the first 30 minutes of a credible ceasefire announcement. You will have 5 minutes of rational price action before the algo-driven flush begins. Keep Reuters alerts on your phone. The moment you see ceasefire confirmed — close oil first, then reassess gold.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-number">05</div>
+      <div class="rule-title">Take Half Off at Your First Target</div>
+      <div class="rule-body">When gold hits $5,450, close 50% and move your stop to breakeven on the rest. You have now guaranteed a positive trade. This is not weakness — it is professional risk management. The same traders who complain about "leaving money on the table" are the same ones who give all their gains back.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-number">06</div>
+      <div class="rule-title">Do Not Add to Losing Positions</div>
+      <div class="rule-body">If your stop loss triggers, do not immediately re-enter and double your position to "get it back." The market does not owe you anything. Reassess calmly. Did the fundamental thesis change? If the answer is no, you may re-enter at a more favorable price. If yes, move on.</div>
+    </div>
+  </div>
+
+  <!-- SECTION 9: TIMELINE STRIP -->
+  <div class="section-rule">
+    <span class="rule-label">Hour-by-Hour Timeline</span>
+    <div class="rule-line"></div>
+    <span class="rule-num">IX</span>
+  </div>
+
+  <div class="timeline-strip">
+    <div class="tl-col active">
+      <span class="tl-time">NOW — SUN 9 PM CET</span>
+      <div class="tl-title">Account Setup</div>
+      <div class="tl-desc">Open XTB or Pepperstone. Deposit via card. Enable CFD trading. Download app. Run demo trade.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">SUN 11 PM – 1 AM CET</span>
+      <div class="tl-title">OTC Watch</div>
+      <div class="tl-desc">CME futures open 1 AM CET. Gold and oil print first official prices. Confirm thesis or adjust plan.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">MON 7:00 AM CET</span>
+      <div class="tl-title">Final Go/No-Go</div>
+      <div class="tl-desc">3-question check: Brent >$78? Gold >$5,250? No ceasefire? All YES = green light.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">MON 9:30 AM CET</span>
+      <div class="tl-title">Markets Open — WAIT</div>
+      <div class="tl-desc">European cash open. Watch the chaos. Do not enter. Observe price discovery. Spreads wide.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">MON 10:00–10:30 AM CET</span>
+      <div class="tl-title">ENTER POSITIONS</div>
+      <div class="tl-desc">Buy gold CFD with SL $5,100. Buy oil CFD with SL $74 Brent. Confirm trades open. Screenshot.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">DAY 1–7</span>
+      <div class="tl-title">Hold & Monitor</div>
+      <div class="tl-desc">Check hourly. Take 50% profit at TP1. Trail stops. Monitor ceasefire headlines daily.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">WHENEVER HIT</span>
+      <div class="tl-title">Exit Triggers</div>
+      <div class="tl-desc">Ceasefire → exit oil in 5 min. Hormuz reopens → exit oil. TP hit → close 50%, trail rest.</div>
+    </div>
+    <div class="tl-col">
+      <span class="tl-time">DAY 7–14 MAX</span>
+      <div class="tl-title">Hard Deadline</div>
+      <div class="tl-desc">Close all oil by Day 7. Close 75% of gold by Day 14. Walk away with profits. Reassess landscape.</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div>
+    <div class="footer-title">THE EUROPEAN GOLD & OIL WAR PLAYBOOK</div>
+    <div class="footer-meta">Compiled Sunday March 1, 2026 · Based on live analyst data, OTC pricing, and CFD platform specifications</div>
+  </div>
+  <div class="footer-meta" style="text-align:right;">
+    NOT FINANCIAL ADVICE · FOR EDUCATIONAL PURPOSES ONLY<br>
+    CFDs ARE HIGH RISK · 70% OF RETAIL ACCOUNTS LOSE MONEY<br>
+    SOURCES: REUTERS · BARCLAYS · UBS · ICIS · KPLER · RYSTAD · VANDA · BLUE LINE FUTURES · XTB · PEPPERSTONE
+  </div>
+</footer>
+
+</body>
+</html>

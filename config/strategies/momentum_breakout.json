@@ -1,0 +1,29 @@
+{
+  "name": "Momentum Breakout",
+  "description": "Enter on confirmed breakout above resistance with volume confirmation. Ride momentum with trailing stop.",
+  "enabled": true,
+  "entry_conditions": {
+    "price_above_ema_20": true,
+    "price_above_ema_50": true,
+    "rsi_range": [50, 75],
+    "volume_above_avg_multiplier": 1.5,
+    "breakout_confirmation_candles": 2,
+    "min_confluence_score": 60
+  },
+  "exit_conditions": {
+    "stop_loss_atr_multiplier": 2.0,
+    "take_profit_rr_ratio": 2.5,
+    "trailing_stop_activation_rr": 1.0,
+    "trailing_stop_distance_atr": 1.5,
+    "exit_on_rsi_divergence": true
+  },
+  "position_management": {
+    "default_leverage": 3,
+    "max_leverage": 7,
+    "scale_in": false,
+    "partial_tp_at_1r": true,
+    "partial_tp_pct": 50
+  },
+  "preferred_timeframes": ["1h", "4h"],
+  "preferred_assets": ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
+}

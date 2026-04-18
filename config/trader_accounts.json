@@ -1,0 +1,24 @@
+{
+  "tracked_accounts": [],
+  "discovery": {
+    "platforms": ["bybit"],
+    "min_win_rate": 0.55,
+    "min_total_trades": 50,
+    "min_pnl_30d_pct": 10,
+    "max_drawdown_30d_pct": 20,
+    "scoring_weights": {
+      "win_rate_consistency": 0.30,
+      "risk_adjusted_returns": 0.25,
+      "trade_frequency": 0.20,
+      "specialization_match": 0.15,
+      "recency_bonus": 0.10
+    },
+    "refresh_weekly": true,
+    "max_tracked": 20
+  },
+  "follow_rules": {
+    "auto_demote_after_weeks_underperforming": 4,
+    "promote_after_weeks_outperforming": 2,
+    "min_signal_quality_to_act": 70
+  }
+}

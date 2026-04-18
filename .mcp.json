@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tradingview": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/lazarstumbov/tradingview-mcp/src/server.js"],
+      "env": {
+        "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    }
+  }
+}

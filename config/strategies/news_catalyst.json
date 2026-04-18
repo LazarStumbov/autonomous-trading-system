@@ -1,0 +1,33 @@
+{
+  "name": "News Catalyst",
+  "description": "Trade breaking news events that create directional momentum. Fast entry, aggressive targets.",
+  "enabled": true,
+  "entry_conditions": {
+    "news_urgency_min": 8,
+    "sentiment_score_threshold": 0.7,
+    "volume_spike_multiplier": 2.0,
+    "price_movement_confirmation_pct": 0.5,
+    "min_confluence_score": 55,
+    "max_entry_delay_minutes": 15
+  },
+  "exit_conditions": {
+    "stop_loss_atr_multiplier": 2.5,
+    "take_profit_rr_ratio": 3.0,
+    "trailing_stop_activation_rr": 1.5,
+    "max_hold_hours": 24,
+    "exit_on_sentiment_reversal": true
+  },
+  "position_management": {
+    "default_leverage": 5,
+    "max_leverage": 10,
+    "scale_in": false,
+    "fast_exit_priority": true,
+    "reduce_size_after_initial_move": true
+  },
+  "news_categories": {
+    "highest_priority": ["war", "sanctions", "central_bank", "regulation", "hack", "etf_approval"],
+    "high_priority": ["earnings_crypto", "partnership", "adoption", "macro_data"],
+    "medium_priority": ["analyst_upgrade", "whale_movement", "exchange_listing"]
+  },
+  "preferred_assets": ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
+}

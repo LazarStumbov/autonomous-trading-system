@@ -1,0 +1,29 @@
+{
+  "name": "Mean Reversion",
+  "description": "Fade extreme moves when price deviates significantly from moving average with RSI confirmation.",
+  "enabled": true,
+  "entry_conditions": {
+    "bb_band_touch": true,
+    "rsi_oversold_below": 30,
+    "rsi_overbought_above": 70,
+    "distance_from_ema20_pct": 3.0,
+    "volume_declining": true,
+    "min_confluence_score": 65
+  },
+  "exit_conditions": {
+    "stop_loss_atr_multiplier": 1.5,
+    "take_profit_to_ema20": true,
+    "take_profit_rr_ratio": 2.0,
+    "max_hold_candles": 12,
+    "exit_on_momentum_continuation": true
+  },
+  "position_management": {
+    "default_leverage": 2,
+    "max_leverage": 5,
+    "scale_in": true,
+    "scale_in_levels": [0.5, 0.3, 0.2],
+    "partial_tp_at_mean": true
+  },
+  "preferred_timeframes": ["1h", "4h"],
+  "preferred_assets": ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+}

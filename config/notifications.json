@@ -1,0 +1,33 @@
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "bot_token_env": "TELEGRAM_BOT_TOKEN",
+      "chat_id_env": "TELEGRAM_CHAT_ID"
+    },
+    "slack": {
+      "enabled": false,
+      "webhook_url_env": "SLACK_WEBHOOK_URL"
+    }
+  },
+  "alert_routing": {
+    "trade_executed": ["telegram"],
+    "trade_closed": ["telegram"],
+    "stop_loss_hit": ["telegram"],
+    "circuit_breaker_triggered": ["telegram", "slack"],
+    "daily_report": ["telegram"],
+    "weekly_report": ["telegram"],
+    "high_confluence_alert": ["telegram"],
+    "news_urgent": ["telegram"],
+    "system_error": ["telegram", "slack"],
+    "drawdown_warning": ["telegram"],
+    "polymarket_bet_placed": ["telegram"],
+    "polymarket_bet_resolved": ["telegram"]
+  },
+  "quiet_hours": {
+    "enabled": false,
+    "start_utc": "23:00",
+    "end_utc": "07:00",
+    "override_for": ["circuit_breaker_triggered", "system_error"]
+  }
+}

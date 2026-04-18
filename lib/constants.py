@@ -1,0 +1,85 @@
+"""Shared constants, enums, and type definitions for the trading system."""
+
+from enum import Enum
+
+
+class Pillar(str, Enum):
+    MARKET = "market"
+    POLYMARKET = "polymarket"
+
+
+class Direction(str, Enum):
+    LONG = "long"
+    SHORT = "short"
+    YES = "yes"
+    NO = "no"
+
+
+class TradeStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+class SignalType(str, Enum):
+    TECHNICAL_BREAKOUT = "technical_breakout"
+    SENTIMENT_SHIFT = "sentiment_shift"
+    TRADER_ACCUMULATION = "trader_accumulation"
+    POLYMARKET_WHALE_ENTRY = "polymarket_whale_entry"
+    NEWS_CATALYST = "news_catalyst"
+    VOLUME_ANOMALY = "volume_anomaly"
+    CROSS_ASSET_CORRELATION = "cross_asset_correlation"
+
+
+class RiskVerdict(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+
+
+class Strategy(str, Enum):
+    MOMENTUM_BREAKOUT = "momentum_breakout"
+    MEAN_REVERSION = "mean_reversion"
+    NEWS_CATALYST = "news_catalyst"
+    COPY_TRADE = "copy_trade"
+
+
+class AlertType(str, Enum):
+    TRADE_EXECUTED = "trade_executed"
+    TRADE_CLOSED = "trade_closed"
+    STOP_LOSS_HIT = "stop_loss_hit"
+    CIRCUIT_BREAKER = "circuit_breaker_triggered"
+    DAILY_REPORT = "daily_report"
+    WEEKLY_REPORT = "weekly_report"
+    HIGH_CONFLUENCE = "high_confluence_alert"
+    NEWS_URGENT = "news_urgent"
+    SYSTEM_ERROR = "system_error"
+    DRAWDOWN_WARNING = "drawdown_warning"
+    PM_BET_PLACED = "polymarket_bet_placed"
+    PM_BET_RESOLVED = "polymarket_bet_resolved"
+
+
+# Confluence thresholds
+MIN_CONFLUENCE_SCORE = 60
+HIGH_CONFLUENCE_SCORE = 80
+
+# Risk defaults
+DEFAULT_ATR_MULTIPLIER = 2.0
+DEFAULT_LEVERAGE = 3
+MAX_LEVERAGE = 10
+MAX_RISK_PER_TRADE_PCT = 2.0
+MAX_DAILY_DRAWDOWN_PCT = 6.0
+MAX_WEEKLY_DRAWDOWN_PCT = 15.0
+MAX_PORTFOLIO_EXPOSURE_PCT = 30.0
+
+# Polymarket defaults
+PM_MIN_EDGE_PCT = 5.0
+PM_KELLY_FRACTION = 0.25
+PM_MAX_BET_PCT = 5.0
+
+# Paths (relative to project root)
+CONFIG_DIR = "config"
+DATA_DIR = "data"
+DB_PATH = "data/db/trading.db"
+MEMORY_DIR = "data/memory"
+SIGNALS_DIR = "data/signals"
+REPORTS_DIR = "data/reports"

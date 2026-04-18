@@ -1,0 +1,36 @@
+{
+  "name": "Copy Trade",
+  "description": "Mirror positions from top-performing Bybit traders with independent risk validation.",
+  "enabled": true,
+  "entry_conditions": {
+    "min_trader_skill_score": 70,
+    "min_trader_win_rate": 0.55,
+    "min_trader_history_trades": 50,
+    "trader_must_be_in_follow_list": true,
+    "confirm_with_own_technicals": true,
+    "min_confluence_score": 50
+  },
+  "exit_conditions": {
+    "follow_trader_exit": true,
+    "override_with_own_stop_loss": true,
+    "stop_loss_atr_multiplier": 2.0,
+    "take_profit_rr_ratio": 2.0,
+    "max_hold_hours": 72
+  },
+  "position_management": {
+    "size_relative_to_trader_conviction": true,
+    "max_leverage_override": 5,
+    "reduce_size_for_lower_scored_traders": true,
+    "size_scaling": {
+      "skill_score_90_plus": 1.0,
+      "skill_score_80_89": 0.75,
+      "skill_score_70_79": 0.5
+    }
+  },
+  "copy_rules": {
+    "max_simultaneous_copies": 3,
+    "delay_entry_seconds": 30,
+    "skip_if_price_moved_pct": 1.0,
+    "require_independent_risk_check": true
+  }
+}

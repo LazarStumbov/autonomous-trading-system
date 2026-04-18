@@ -1,0 +1,65 @@
+{
+  "watchlist": {
+    "crypto_perpetuals": [
+      "BTC/USDT:USDT",
+      "ETH/USDT:USDT",
+      "SOL/USDT:USDT",
+      "DOGE/USDT:USDT",
+      "XRP/USDT:USDT",
+      "AVAX/USDT:USDT",
+      "LINK/USDT:USDT",
+      "ADA/USDT:USDT"
+    ],
+    "crypto_spot": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT"
+    ],
+    "forex_via_crypto": [
+      "BTC/EUR",
+      "ETH/EUR"
+    ]
+  },
+  "scan_intervals": {
+    "news_minutes": 15,
+    "market_data_minutes": 60,
+    "polymarket_hours": 4,
+    "full_analysis_hours": 4
+  },
+  "timeframes": {
+    "primary": "1h",
+    "confirmation": "4h",
+    "trend": "1d",
+    "entry": "15m"
+  },
+  "technical_analysis": {
+    "indicators": ["RSI", "MACD", "BB", "ATR", "EMA_20", "EMA_50", "EMA_200", "VOLUME"],
+    "alert_thresholds": {
+      "rsi_oversold": 30,
+      "rsi_overbought": 70,
+      "volume_spike_multiplier": 2.5,
+      "bb_squeeze_threshold": 0.02
+    }
+  },
+  "confluence": {
+    "min_signals_for_alert": 3,
+    "signal_types": [
+      "technical_breakout",
+      "sentiment_shift",
+      "trader_accumulation",
+      "polymarket_whale_entry",
+      "news_catalyst",
+      "volume_anomaly",
+      "cross_asset_correlation"
+    ],
+    "weights": {
+      "technical_breakout": 1.0,
+      "sentiment_shift": 0.8,
+      "trader_accumulation": 1.2,
+      "polymarket_whale_entry": 0.7,
+      "news_catalyst": 1.5,
+      "volume_anomaly": 0.9,
+      "cross_asset_correlation": 0.6
+    }
+  }
+}
