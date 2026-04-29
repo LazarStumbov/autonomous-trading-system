@@ -191,6 +191,17 @@ def _call_opus(input_blob: dict) -> tuple[str, dict]:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return _stub_response("ANTHROPIC_API_KEY not set"), {"model": None, "stubbed": True}
+
+    # Cost gate (D6.6): allowlisted as opus_daily_brief, so this still runs
+    # even when the monthly cap is hit — but cost is logged either way.
+    try:
+        from lib.anthropic_cost_tracker import should_allow, track_call  # type: ignore
+        ok, reason = should_allow("opus_daily_brief")
+        if not ok:
+            return _stub_response(f"cost gate: {reason}"), {"model": None, "stubbed": True, "cost_gate": reason}
+    except Exception:
+        track_call = None  # type: ignore
+
     try:
         import anthropic  # type: ignore
     except ImportError:
@@ -204,10 +215,18 @@ def _call_opus(input_blob: dict) -> tuple[str, dict]:
     )
 
     try:
+        # D6.2: prompt caching on the stable system prompt (~5min TTL).
+        # System prompt + playbook context = stable; today's data = volatile.
         resp = client.messages.create(
             model=OPUS_MODEL,
             max_tokens=MAX_OUTPUT_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": user_content}],
         )
     except Exception as e:
@@ -215,11 +234,33 @@ def _call_opus(input_blob: dict) -> tuple[str, dict]:
         return _stub_response(f"Opus call failed: {e}"), {"model": OPUS_MODEL, "stubbed": True, "error": str(e)}
 
     text = "".join(getattr(b, "text", "") for b in resp.content)
+    usage = getattr(resp, "usage", None)
+    in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+    cached_tok = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+    out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+
+    if track_call is not None:
+        try:
+            usd = track_call(
+                job="opus_daily_brief",
+                model=OPUS_MODEL,
+                input_tokens=in_tok - cached_tok,
+                cached_input_tokens=cached_tok,
+                output_tokens=out_tok,
+            )
+        except Exception as e:
+            usd = None
+            print(f"[opus_daily_review] cost track failed: {e}")
+    else:
+        usd = None
+
     meta = {
         "model": getattr(resp, "model", OPUS_MODEL),
         "stop_reason": getattr(resp, "stop_reason", None),
-        "input_tokens": getattr(resp.usage, "input_tokens", None) if hasattr(resp, "usage") else None,
-        "output_tokens": getattr(resp.usage, "output_tokens", None) if hasattr(resp, "usage") else None,
+        "input_tokens": in_tok,
+        "cached_input_tokens": cached_tok,
+        "output_tokens": out_tok,
+        "usd_cost": usd,
         "stubbed": False,
     }
     return text.strip(), meta

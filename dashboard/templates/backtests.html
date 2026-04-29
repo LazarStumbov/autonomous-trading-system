@@ -1,0 +1,32 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Backtests</h2>
+<form>
+  <label>Strategy: <input type="text" name="strategy_id" value="{{ strategy_id }}"></label>
+  <button type="submit">Filter</button>
+</form>
+<table>
+<thead><tr>
+  <th>strategy</th><th>symbol</th><th>tf</th><th>days</th><th>n trades</th>
+  <th>WR</th><th>PF</th><th>Sharpe</th><th>Sortino</th><th>maxDD</th><th>gate?</th><th>ran</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+  <td>{{ r.strategy_id }}</td>
+  <td>{{ r.symbol }}</td>
+  <td>{{ r.timeframe }}</td>
+  <td>{{ r.days }}</td>
+  <td>{{ r.trades }}</td>
+  <td>{% if r.win_rate is not none %}{{ '%.0f'|format(r.win_rate * 100) }}%{% endif %}</td>
+  <td>{% if r.profit_factor is not none %}{{ '%.2f'|format(r.profit_factor) }}{% endif %}</td>
+  <td>{% if r.sharpe is not none %}{{ '%.2f'|format(r.sharpe) }}{% endif %}</td>
+  <td>{% if r.sortino is not none %}{{ '%.2f'|format(r.sortino) }}{% endif %}</td>
+  <td>{% if r.max_dd_pct is not none %}{{ '%.1f'|format(r.max_dd_pct) }}%{% endif %}</td>
+  <td>{{ '✓' if r.passed_gate else '✗' }}</td>
+  <td>{{ (r.ran_at or '')[:19] }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

@@ -147,10 +147,48 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
         result["status"] = "ERROR"
         result["errors"].append(str(e))
 
+    # Capture chart screenshot (best-effort — never blocks execution)
+    if result["status"] in ("EXECUTED", "DRY_RUN"):
+        chart_url = _try_capture_screenshot(order)
+        if chart_url:
+            order.setdefault("reasoning", "")
+            order["reasoning"] = (order["reasoning"] + f"\nchart_url:{chart_url}").lstrip()
+
     # Log to database
     _log_to_db(order, result)
 
     return result
+
+
+def _try_capture_screenshot(order: dict) -> str | None:
+    """Best-effort chart screenshot via TradingView MCP bridge.
+
+    Saves to data/trades/<trade_id_or_timestamp>/entry.png. Never raises —
+    failure to screenshot must not block trade execution. Returns the saved
+    path or None.
+
+    The actual MCP call is delegated to a callable in os.environ if present,
+    otherwise this is a no-op. Real wiring lives in the Claude agent layer
+    that has access to mcp__tradingview__* tools.
+    """
+    try:
+        import os
+        from pathlib import Path
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))) / "data" / "trades" / ts
+        out_dir.mkdir(parents=True, exist_ok=True)
+        save_path = str(out_dir / "entry.png")
+        # Hook stub: callers running inside Claude Code can monkey-patch
+        # `_screenshot_hook` to wire the real MCP bridge.
+        hook = globals().get("_screenshot_hook")
+        if callable(hook):
+            return hook(order["asset"], save_path) or save_path
+        # Otherwise leave a placeholder marker so post-trade tooling knows
+        # a screenshot was *requested* but not captured (e.g. running on Modal).
+        Path(save_path + ".pending").touch()
+        return save_path + ".pending"
+    except Exception:
+        return None
 
 
 def _log_to_db(order: dict, result: dict):

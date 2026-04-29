@@ -1,0 +1,9 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Trade review packets</h2>
+<div class="row3">
+  <section><h3>Pending ({{ pending|length }})</h3><ul>{% for f in pending %}<li>{{ f }}</li>{% endfor %}</ul></section>
+  <section><h3>Completed ({{ completed|length }})</h3><ul>{% for f in completed %}<li>{{ f }}</li>{% endfor %}</ul></section>
+  <section><h3>Archive ({{ archive|length }})</h3><ul>{% for f in archive %}<li>{{ f }}</li>{% endfor %}</ul></section>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>System status</h2>
+<div class="metrics">
+  <div class="m {{ 'red' if halted else 'green' }}">
+    <div class="label">Trading</div>
+    <div class="val">{{ 'HALTED' if halted else 'ONLINE' }}</div>
+  </div>
+  <div class="m"><div class="label">Open positions</div><div class="val">{{ open_positions|length }}</div></div>
+  <div class="m {{ 'green' if daily_pnl >= 0 else 'red' }}">
+    <div class="label">Day P&amp;L ({{ daily_count }} trades)</div>
+    <div class="val">${{ '%+.2f'|format(daily_pnl) }}</div>
+  </div>
+  <div class="m {{ 'green' if weekly_pnl >= 0 else 'red' }}">
+    <div class="label">Week P&amp;L ({{ weekly_count }} trades)</div>
+    <div class="val">${{ '%+.2f'|format(weekly_pnl) }}</div>
+  </div>
+  <div class="m"><div class="label">API spend MTD</div><div class="val">${{ '%.2f'|format(api_mtd) }}</div></div>
+</div>
+
+<h3>Open positions</h3>
+{% if open_positions %}
+<table>
+  <thead><tr><th>id</th><th>asset</th><th>dir</th><th>entry</th><th>SL</th><th>TP</th><th>strategy</th><th>opened</th></tr></thead>
+  <tbody>
+  {% for t in open_positions %}
+    <tr>
+      <td><a href="/trades/{{ t.id }}">{{ t.id }}</a></td>
+      <td>{{ t.asset }}</td>
+      <td class="{{ 'green' if t.direction == 'long' else 'red' }}">{{ t.direction|upper }}</td>
+      <td>${{ '%.4f'|format(t.entry_price) }}</td>
+      <td>${{ '%.4f'|format(t.stop_loss or 0) }}</td>
+      <td>${{ '%.4f'|format(t.take_profit or 0) }}</td>
+      <td>{{ t.strategy or '?' }}</td>
+      <td>{{ (t.opened_at or '')[:19] }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No open positions.</p>
+{% endif %}
+{% endblock %}

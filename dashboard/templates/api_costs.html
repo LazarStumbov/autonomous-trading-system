@@ -1,0 +1,32 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>API costs · {{ cs.month }}</h2>
+{% if cs.error %}
+  <p class="red">Error: {{ cs.error }}</p>
+{% else %}
+<div class="metrics">
+  <div class="m {{ 'red' if cs.cap_reached else 'green' }}">
+    <div class="label">MTD spend</div>
+    <div class="val">${{ '%.2f'|format(cs.mtd_usd) }}</div>
+  </div>
+  <div class="m"><div class="label">Cap</div><div class="val">${{ '%.0f'|format(cs.monthly_cap_usd) }}</div></div>
+  <div class="m {{ 'red' if cs.cap_reached else '' }}"><div class="label">Status</div>
+    <div class="val">{{ 'CAP REACHED' if cs.cap_reached else 'OK' }}</div></div>
+</div>
+<table>
+<thead><tr><th>model</th><th>calls</th><th>input</th><th>cached</th><th>output</th><th>$</th></tr></thead>
+<tbody>
+{% for m in cs.by_model %}
+<tr>
+  <td>{{ m.model }}</td>
+  <td>{{ m.calls }}</td>
+  <td>{{ m.input_tokens }}</td>
+  <td>{{ m.cached_input_tokens }}</td>
+  <td>{{ m.output_tokens }}</td>
+  <td>${{ '%.4f'|format(m.usd_cost) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Trades</h2>
+<form>
+  <label>Status:
+    <select name="status" onchange="this.form.submit()">
+      <option value="">all</option>
+      <option value="open"      {% if status == 'open' %}selected{% endif %}>open</option>
+      <option value="closed"    {% if status == 'closed' %}selected{% endif %}>closed</option>
+      <option value="cancelled" {% if status == 'cancelled' %}selected{% endif %}>cancelled</option>
+    </select>
+  </label>
+  <label>Strategy: <input type="text" name="strategy" value="{{ strategy }}"></label>
+  <button type="submit">Filter</button>
+</form>
+<table>
+<thead><tr>
+  <th>id</th><th>opened</th><th>asset</th><th>dir</th><th>strategy</th>
+  <th>entry</th><th>exit</th><th>P&amp;L $</th><th>P&amp;L %</th><th>status</th>
+</tr></thead>
+<tbody>
+{% for t in trades %}
+<tr>
+  <td><a href="/trades/{{ t.id }}">{{ t.id }}</a></td>
+  <td>{{ (t.opened_at or '')[:19] }}</td>
+  <td>{{ t.asset }}</td>
+  <td class="{{ 'green' if t.direction == 'long' else 'red' }}">{{ t.direction|upper }}</td>
+  <td>{{ t.strategy or '?' }}</td>
+  <td>${{ '%.4f'|format(t.entry_price) }}</td>
+  <td>{% if t.exit_price %}${{ '%.4f'|format(t.exit_price) }}{% else %}-{% endif %}</td>
+  <td class="{{ 'green' if (t.pnl_usd or 0) >= 0 else 'red' }}">{% if t.pnl_usd is not none %}${{ '%+.2f'|format(t.pnl_usd) }}{% endif %}</td>
+  <td class="{{ 'green' if (t.pnl_pct or 0) >= 0 else 'red' }}">{% if t.pnl_pct is not none %}{{ '%+.2f'|format(t.pnl_pct) }}%{% endif %}</td>
+  <td>{{ t.status }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

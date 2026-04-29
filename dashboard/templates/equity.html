@@ -1,0 +1,23 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Equity curve</h2>
+<canvas id="eq" width="900" height="340"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+fetch('/api/equity.json').then(r => r.json()).then(rows => {
+  const labels = rows.map(r => r.date);
+  const cum = rows.map(r => r.cumulative_pnl || 0);
+  const daily = rows.map(r => r.total_pnl || 0);
+  const ctx = document.getElementById('eq').getContext('2d');
+  if (!window.Chart) { document.body.insertAdjacentHTML('beforeend', '<pre>' + JSON.stringify(rows, null, 2) + '</pre>'); return; }
+  new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Cumulative PnL', data: cum, borderColor: '#5aa85a', tension: 0.2 },
+      { label: 'Daily PnL',      data: daily, type: 'bar', backgroundColor: '#888' },
+    ]},
+    options: { responsive: false, plugins: { legend: { labels: { color: '#ddd' }}}}
+  });
+});
+</script>
+{% endblock %}

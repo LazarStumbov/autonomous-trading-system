@@ -1,0 +1,14 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Memory</h2>
+<div class="row">
+  <aside class="sidebar">
+    <ul>
+    {% for f in files %}
+      <li><a href="?file={{ f }}" class="{{ 'active' if f == current else '' }}">{{ f }}</a></li>
+    {% endfor %}
+    </ul>
+  </aside>
+  <article class="md">{{ html|safe }}</article>
+</div>
+{% endblock %}

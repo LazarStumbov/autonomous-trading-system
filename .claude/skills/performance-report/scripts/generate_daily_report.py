@@ -50,6 +50,18 @@ def main():
         summary_lines.append("By strategy:")
         for sid, m in sorted(by_strat.items(), key=lambda kv: -kv[1].get("total_pnl", 0)):
             summary_lines.append(f"  {sid}: n={m['n']} pnl=${m['total_pnl']:.2f} wr={m['win_rate']*100:.0f}%")
+    # MTD Anthropic spend (D6.6): visible in the daily summary so cost stays
+    # in front of mind without opening the dashboard.
+    try:
+        from lib.anthropic_cost_tracker import cost_summary as _cs  # type: ignore
+        cs = _cs()
+        summary_lines.append(
+            f"API spend MTD: ${cs['mtd_usd']:.2f} / ${cs['monthly_cap_usd']:.0f}"
+            + ("  [CAP REACHED]" if cs["cap_reached"] else "")
+        )
+    except Exception:
+        pass
+
     summary = "\n".join(summary_lines)
 
     with open(reports_dir / "latest_daily_summary.txt", "w") as f:
