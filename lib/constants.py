@@ -43,6 +43,45 @@ class Strategy(str, Enum):
     COPY_TRADE = "copy_trade"
 
 
+class AssetClass(str, Enum):
+    """Coarse asset class taxonomy. Each maps to a broker adapter in lib/brokers/.
+
+    `kept_for_pillar` indicates which pillar handles this class:
+      MARKET     — all crypto + stocks/bonds/CFDs
+      POLYMARKET — only PM contracts
+    """
+
+    CRYPTO_PERP = "crypto_perp"          # Bybit derivatives
+    CRYPTO_SPOT = "crypto_spot"          # Bybit / Binance spot
+    STOCK_EQUITY = "stock_equity"        # Alpaca, IBKR
+    BOND_ETF = "bond_etf"                # TLT, IEF, AGG via Alpaca/IBKR
+    BOND_FUTURE = "bond_future"          # ZN, ZB futures via IBKR
+    FOREX_SPOT = "forex_spot"            # EUR/USD etc. via IBKR/oanda
+    CFD_INDEX = "cfd_index"              # SPX500, NAS100 via CFD broker
+    CFD_COMMODITY = "cfd_commodity"      # XAU/USD, oil via CFD broker
+    CFD_FOREX = "cfd_forex"              # FX as CFD
+    POLYMARKET_BINARY = "polymarket_binary"  # PM YES/NO contracts
+    UNKNOWN = "unknown"
+
+
+# Adapter availability — gates which classes the system will actually trade.
+# Stage 4 will flip stocks/bonds/CFDs to True once their adapters are
+# verified end-to-end with a paper account. Keep crypto-only on by default.
+ASSET_CLASS_ENABLED: dict[AssetClass, bool] = {
+    AssetClass.CRYPTO_PERP: True,
+    AssetClass.CRYPTO_SPOT: True,
+    AssetClass.STOCK_EQUITY: False,
+    AssetClass.BOND_ETF: False,
+    AssetClass.BOND_FUTURE: False,
+    AssetClass.FOREX_SPOT: False,
+    AssetClass.CFD_INDEX: False,
+    AssetClass.CFD_COMMODITY: False,
+    AssetClass.CFD_FOREX: False,
+    AssetClass.POLYMARKET_BINARY: False,  # Stage 3
+    AssetClass.UNKNOWN: False,
+}
+
+
 class AlertType(str, Enum):
     TRADE_EXECUTED = "trade_executed"
     TRADE_CLOSED = "trade_closed"
