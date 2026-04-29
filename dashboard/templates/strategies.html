@@ -3,15 +3,29 @@
 <h2>Strategies ({{ strategies|length }})</h2>
 <table>
 <thead><tr>
-  <th>id</th><th>mode</th><th>source</th><th>n trades</th><th>WR</th>
+  <th>id</th><th>mode</th><th>source</th>
+  <th>TV trades</th><th>TV WR</th><th>severity</th>
+  <th>live trades</th><th>live WR</th>
   <th>PF</th><th>Sharpe(30d)</th><th>last trade</th>
 </tr></thead>
 <tbody>
 {% for s in strategies %}
 <tr>
-  <td>{{ s.id }}</td>
-  <td>{{ s.mode }}</td>
+  <td><code>{{ s.id }}</code></td>
+  <td>
+    {% if s.mode == 'live' %}<span class="green">live</span>
+    {% elif s.mode == 'paper' %}<span class="green">paper</span>
+    {% elif s.mode == 'disabled' %}<span class="red">disabled</span>
+    {% else %}{{ s.mode }}{% endif %}
+  </td>
   <td>{{ s.source }}</td>
+  <td>{{ s.tv_trades or 0 }}</td>
+  <td>{% if s.tv_win_rate is not none %}{{ '%.0f'|format(s.tv_win_rate * 100) }}%{% endif %}</td>
+  <td>
+    {% if s.tv_severity_passed == 1 %}<span class="green">PASS</span>
+    {% elif s.tv_severity_passed == 0 and s.tv_trades %}<span class="red">FAIL</span>
+    {% else %}-{% endif %}
+  </td>
   <td>{{ s.total_trades or 0 }}</td>
   <td>{% if s.win_rate is not none %}{{ '%.0f'|format(s.win_rate * 100) }}%{% endif %}</td>
   <td>{% if s.profit_factor is not none %}{{ '%.2f'|format(s.profit_factor) }}{% endif %}</td>
@@ -21,4 +35,5 @@
 {% endfor %}
 </tbody>
 </table>
+<p class="muted">Strategies marked <span class="red">disabled</span> failed the &ge;200-trade TV severity gate; reasons live in the demotion_reason column.</p>
 {% endblock %}

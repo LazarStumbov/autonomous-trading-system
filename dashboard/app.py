@@ -142,10 +142,12 @@ def trade_detail(request: Request, trade_id: int):
 def strategies(request: Request):
     rows = _q(
         """SELECT r.id, r.mode, r.source, p.total_trades, p.win_rate, p.profit_factor,
-                  p.sharpe_30d, p.last_trade_at
+                  p.sharpe_30d, p.last_trade_at,
+                  r.tv_trades, r.tv_win_rate, r.tv_severity_passed,
+                  r.tv_severity_reason, r.demotion_reason
            FROM strategy_registry r
            LEFT JOIN strategy_performance p ON p.strategy_id = r.id
-           ORDER BY p.total_trades DESC NULLS LAST, r.id ASC"""
+           ORDER BY r.tv_severity_passed DESC, r.tv_trades DESC, r.id ASC"""
     )
     return TEMPLATES.TemplateResponse("strategies.html", {"request": request, "strategies": rows})
 

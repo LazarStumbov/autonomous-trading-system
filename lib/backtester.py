@@ -192,7 +192,14 @@ def backtest_strategy(
     max_leverage: float = 10.0,
     timeout_bars: int = DEFAULT_TIMEOUT_BARS,
 ) -> BacktestResult:
-    """Replay strategy bar-by-bar against a candle list ([[ts,o,h,l,c,v], ...])."""
+    """Replay strategy bar-by-bar against a candle list ([[ts,o,h,l,c,v], ...]).
+
+    Performance: indicators are precomputed once on the full ohlcv and sliced
+    per bar, instead of recomputing on a growing window each bar (O(n) vs.
+    O(n) per bar = O(n²) overall). Strategies that use only causal indicators
+    (EMA, RSI, MACD, BB, ATR, etc., all of which are right-aligned) see the
+    same data structure they would have seen with the slow path.
+    """
     ohlcv_full = candles_to_ohlcv(candles)
     n = len(candles)
 
@@ -203,16 +210,36 @@ def backtest_strategy(
     period_start = datetime.fromtimestamp(candles[0][0] / 1000, tz=timezone.utc).isoformat() if n else ""
     period_end = datetime.fromtimestamp(candles[-1][0] / 1000, tz=timezone.utc).isoformat() if n else ""
 
+    # Precompute indicators ONCE on the full ohlcv when the strategy explicitly
+    # declares it's safe (all returned values are lists, no scalars that depend
+    # on "current bar"). Strategies opt in by setting `precompute_safe = True`.
+    # Strategies that mix lists + scalars (e.g. vol_ratio) get the safe per-bar
+    # path so we don't silently feed them stale scalar values.
+    _precompute_safe = bool(getattr(strategy, "precompute_safe", False))
+    indicators_full: Optional[dict] = None
+    if _precompute_safe:
+        try:
+            cand = strategy.populate_indicators(ohlcv_full)
+            if all(isinstance(v, list) for v in cand.values()):
+                indicators_full = cand
+        except Exception:
+            indicators_full = None
+
+    def _slice_indicators(idx: int) -> dict:
+        if indicators_full is None:
+            return strategy.populate_indicators(slice_ohlcv(ohlcv_full, idx))
+        end = idx + 1
+        return {k: v[:end] for k, v in indicators_full.items()}
+
     for i in range(MIN_BARS_FOR_SIGNAL, n):
-        window = slice_ohlcv(ohlcv_full, i)
         bar = {
-            "open": window["open"][-1],
-            "high": window["high"][-1],
-            "low": window["low"][-1],
-            "close": window["close"][-1],
-            "volume": window["volume"][-1],
-            "timestamp": window["timestamp"][-1],
-            "index": i,
+            "open":      ohlcv_full["open"][i],
+            "high":      ohlcv_full["high"][i],
+            "low":       ohlcv_full["low"][i],
+            "close":     ohlcv_full["close"][i],
+            "volume":    ohlcv_full["volume"][i],
+            "timestamp": ohlcv_full["timestamp"][i],
+            "index":     i,
         }
 
         # ── If a position is open, check for exit ─────────────────────────
@@ -238,7 +265,7 @@ def backtest_strategy(
             # Strategy-driven early exit
             if exit_reason is None:
                 try:
-                    indicators = strategy.populate_indicators(window)
+                    indicators = _slice_indicators(i)
                     early = strategy.exit_signal(indicators, bar, open_pos)
                     if early is not None:
                         exit_price, exit_reason = bar["close"], f"strategy:{early.reason}"
@@ -282,13 +309,16 @@ def backtest_strategy(
         # ── If flat, check for entry ──────────────────────────────────────
         if open_pos is None and capital > 0:
             try:
-                indicators = strategy.populate_indicators(window)
+                indicators = _slice_indicators(i)
                 entry: Optional[EntrySignal] = strategy.entry_signal(indicators, bar)
             except Exception:
                 entry = None
 
             if entry is not None:
-                atr_vals = indicators.get("atr_14") or atr_fn(window["high"], window["low"], window["close"], 14)
+                atr_vals = indicators.get("atr_14") or atr_fn(
+                    ohlcv_full["high"][:i + 1], ohlcv_full["low"][:i + 1],
+                    ohlcv_full["close"][:i + 1], 14,
+                )
                 atr_val = atr_vals[-1] if atr_vals and atr_vals[-1] is not None else 0.0
                 if atr_val <= 0:
                     continue
