@@ -1,0 +1,6 @@
+{
+  "description": "Manual overrides for the strategy registry. Loader applies these on top of DB-stored mode. See lib/strategy_loader.py.",
+  "force_enable": [],
+  "force_disable": [],
+  "pin_params": {}
+}

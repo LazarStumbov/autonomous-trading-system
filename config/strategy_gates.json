@@ -1,0 +1,30 @@
+{
+  "description": "Thresholds for strategy promotion/demotion pipeline (see lib/backtester.py and lib/strategy_tuner.py).",
+  "backtest_to_paper": {
+    "min_window_days": 90,
+    "min_trades": 30,
+    "min_win_rate": 0.45,
+    "min_profit_factor": 1.3,
+    "min_sharpe": 1.0,
+    "max_drawdown_pct": 20.0
+  },
+  "paper_to_live": {
+    "min_paper_days": 14,
+    "min_paper_signals": 10,
+    "paper_vs_backtest_winrate_deviation_max": 0.20,
+    "no_single_day_loss_pct_above": 5.0
+  },
+  "live_to_paper_demotion": {
+    "last_n_trades_min_winrate": 0.40,
+    "last_n_trades_lookback": 20,
+    "min_profit_factor_30d": 1.0,
+    "max_consecutive_losses": 5
+  },
+  "paper_to_disabled": {
+    "consecutive_paper_gate_failures": 2
+  },
+  "loop_circuit_breaker": {
+    "weekly_sharpe_auto_applied_min": 0.0,
+    "pause_duration_days": 7
+  }
+}

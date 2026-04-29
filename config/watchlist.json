@@ -18,7 +18,48 @@
     "forex_via_crypto": [
       "BTC/EUR",
       "ETH/EUR"
+    ],
+    "stock_equity": [
+      "SPY",
+      "QQQ",
+      "NVDA",
+      "AAPL",
+      "MSFT",
+      "TSLA"
+    ],
+    "bond_etf": [
+      "TLT",
+      "IEF",
+      "AGG"
+    ],
+    "forex_spot": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD"
+    ],
+    "cfd_index": [
+      "SPX500",
+      "NAS100",
+      "US30",
+      "GER40"
+    ],
+    "cfd_commodity": [
+      "XAUUSD",
+      "XAGUSD",
+      "USOIL"
     ]
+  },
+  "asset_class_routing": {
+    "_comment": "Maps watchlist categories to AssetClass enum values. Drives broker adapter selection. See lib/constants.py:AssetClass.",
+    "crypto_perpetuals": "crypto_perp",
+    "crypto_spot": "crypto_spot",
+    "forex_via_crypto": "crypto_spot",
+    "stock_equity": "stock_equity",
+    "bond_etf": "bond_etf",
+    "forex_spot": "forex_spot",
+    "cfd_index": "cfd_index",
+    "cfd_commodity": "cfd_commodity"
   },
   "scan_intervals": {
     "news_minutes": 15,

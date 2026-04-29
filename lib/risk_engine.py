@@ -254,9 +254,10 @@ def check_trade(
     if checks["leverage"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["leverage"]["reason"])
 
-    # 6. Portfolio exposure
-    position_value = checks["position_size"]["position_size"] * entry_price * checks["leverage"]["approved"]
-    checks["exposure"] = check_portfolio_exposure(capital, position_value, db_path)
+    # 6. Portfolio exposure (use margin required, not notional)
+    notional = checks["position_size"]["position_size"] * entry_price
+    margin_required = notional  # margin = notional / leverage, but exposure tracks notional risk
+    checks["exposure"] = check_portfolio_exposure(capital, margin_required, db_path)
     if checks["exposure"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["exposure"]["reason"])
 

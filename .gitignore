@@ -47,3 +47,13 @@ node_modules/
 .tmp/
 *.tmp
 *.log
+
+# Stage 2 additions
+data/cache/
+reviews/pending/
+reviews/completed/
+reviews/archive/
+.env.bak-*
+data/backtests/
+data/hypotheses/
+data/memory/

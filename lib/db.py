@@ -1,5 +1,7 @@
 """SQLite database access layer for the trading system."""
 
+from __future__ import annotations
+
 import sqlite3
 import json
 import os
@@ -7,7 +9,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "trading.db")
+def _default_db_path() -> str:
+    """Pick a sensible default DB path. Honors TRADING_DB_PATH override.
+
+    Outside containers we anchor on the repo root (parent of lib/). In Modal
+    we anchor on /app (the working dir set by `os.chdir("/app")`) so the data
+    dir lives under the writable /app tree rather than relative to the
+    site-packages-style lib mount."""
+    override = os.environ.get("TRADING_DB_PATH")
+    if override:
+        return override
+    if os.path.isdir("/app/lib"):
+        return "/app/data/db/trading.db"
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "trading.db")
+
+
+DB_PATH = _default_db_path()
 
 SCHEMA = """
 -- Trade journal: every trade ever placed
@@ -102,6 +119,89 @@ CREATE TABLE IF NOT EXISTS system_state (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Strategy registry: canonical list of every strategy known to the system
+CREATE TABLE IF NOT EXISTS strategy_registry (
+    id TEXT PRIMARY KEY,              -- unique slug, e.g. "freqtrade.bbrsi_v1"
+    name TEXT NOT NULL,
+    description TEXT,
+    source TEXT,                      -- e.g. "freqtrade", "jesse", "internal"
+    source_url TEXT,
+    source_commit TEXT,
+    license TEXT,
+    version TEXT,
+    class_path TEXT,                  -- "lib.strategy_library.freqtrade.bbrsi_v1.BBRSIv1"
+    timeframes_json TEXT,             -- JSON list of supported timeframes
+    asset_classes_json TEXT,          -- JSON list: "crypto_perp", "crypto_spot", "forex"
+    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live', 'disabled')) DEFAULT 'backtest',
+    params_json TEXT,                 -- current parameter values
+    safe_bounds_json TEXT,            -- allowed ranges for auto-tuning
+    backtest_snapshot_json TEXT,      -- latest qualifying backtest metrics
+    paper_snapshot_json TEXT,         -- latest paper-mode metrics
+    risk_notes TEXT,
+    mode_changed_at TEXT,
+    demotion_reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Rolling performance per strategy (live + paper)
+CREATE TABLE IF NOT EXISTS strategy_performance (
+    strategy_id TEXT PRIMARY KEY REFERENCES strategy_registry(id),
+    mode TEXT NOT NULL,
+    total_trades INTEGER DEFAULT 0,
+    winning_trades INTEGER DEFAULT 0,
+    losing_trades INTEGER DEFAULT 0,
+    total_pnl_usd REAL DEFAULT 0,
+    avg_win_usd REAL,
+    avg_loss_usd REAL,
+    profit_factor REAL,
+    expectancy_r REAL,
+    win_rate REAL,
+    last_20_win_rate REAL,
+    sharpe_30d REAL,
+    sortino_30d REAL,
+    max_dd_pct REAL,
+    consecutive_losses INTEGER DEFAULT 0,
+    last_trade_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Backtest run history (a strategy can be backtested many times)
+CREATE TABLE IF NOT EXISTS backtest_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy_id TEXT NOT NULL REFERENCES strategy_registry(id),
+    run_at TEXT NOT NULL DEFAULT (datetime('now')),
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    symbols_json TEXT,
+    timeframe TEXT,
+    starting_capital REAL,
+    ending_capital REAL,
+    trades INTEGER,
+    win_rate REAL,
+    profit_factor REAL,
+    sharpe REAL,
+    sortino REAL,
+    max_dd_pct REAL,
+    avg_r REAL,
+    params_json TEXT,
+    passed_gate INTEGER DEFAULT 0,
+    notes TEXT
+);
+
+-- Strategy hypotheses proposed by the self-improvement loop
+CREATE TABLE IF NOT EXISTS strategy_hypotheses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    hypothesis_type TEXT NOT NULL CHECK (hypothesis_type IN ('param_tweak', 'new_variant', 'new_strategy')),
+    parent_strategy_id TEXT REFERENCES strategy_registry(id),
+    new_strategy_id TEXT REFERENCES strategy_registry(id),
+    rationale TEXT,
+    proposed_params_json TEXT,
+    status TEXT CHECK (status IN ('pending_backtest', 'backtest_failed', 'in_paper', 'paper_failed', 'live', 'retired')) DEFAULT 'pending_backtest',
+    resolved_at TEXT
+);
+
 -- Initialize system state
 INSERT OR IGNORE INTO system_state (key, value) VALUES ('trading_halted', 'false');
 INSERT OR IGNORE INTO system_state (key, value) VALUES ('consecutive_losses', '0');
@@ -116,16 +216,35 @@ CREATE INDEX IF NOT EXISTS idx_trades_asset ON trades(asset);
 CREATE INDEX IF NOT EXISTS idx_signals_type ON signals(signal_type);
 CREATE INDEX IF NOT EXISTS idx_signals_asset ON signals(asset);
 CREATE INDEX IF NOT EXISTS idx_account_perf_platform ON account_performance(platform);
+CREATE INDEX IF NOT EXISTS idx_strategy_mode ON strategy_registry(mode);
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy ON backtest_results(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_hypotheses_status ON strategy_hypotheses(status);
 """
 
 
+_SCHEMA_INIT_DONE: set[str] = set()
+
+
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
-    """Get a database connection with row factory enabled."""
+    """Get a database connection with row factory enabled.
+
+    Self-initializes the schema on first call per `db_path` so callers in
+    fresh containers (e.g. Modal) don't have to remember to call init_db().
+    """
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    if db_path not in _SCHEMA_INIT_DONE:
+        try:
+            conn.executescript(SCHEMA)
+            conn.commit()
+            _SCHEMA_INIT_DONE.add(db_path)
+        except sqlite3.Error:
+            # Don't crash the connection if schema setup races; the table-not-
+            # found error from a follow-up query will surface the real issue.
+            pass
     return conn
 
 
@@ -222,6 +341,103 @@ def get_daily_stats(conn: sqlite3.Connection, date: str = None) -> dict:
         (date,),
     ).fetchone()
     return dict(row) if row else {}
+
+
+def upsert_strategy(conn: sqlite3.Connection, strategy_id: str, **fields) -> None:
+    """Insert or update a strategy in the registry. Unset fields are preserved on update."""
+    existing = conn.execute("SELECT id FROM strategy_registry WHERE id=?", (strategy_id,)).fetchone()
+    now = datetime.now(timezone.utc).isoformat()
+    if existing is None:
+        fields["id"] = strategy_id
+        fields.setdefault("created_at", now)
+        fields.setdefault("updated_at", now)
+        fields.setdefault("mode_changed_at", now)
+        cols = ", ".join(fields.keys())
+        placeholders = ", ".join(["?"] * len(fields))
+        conn.execute(
+            f"INSERT INTO strategy_registry ({cols}) VALUES ({placeholders})",
+            list(fields.values()),
+        )
+    else:
+        fields["updated_at"] = now
+        set_clause = ", ".join(f"{k}=?" for k in fields.keys())
+        conn.execute(
+            f"UPDATE strategy_registry SET {set_clause} WHERE id=?",
+            list(fields.values()) + [strategy_id],
+        )
+    conn.commit()
+
+
+def get_strategy(conn: sqlite3.Connection, strategy_id: str) -> dict | None:
+    row = conn.execute("SELECT * FROM strategy_registry WHERE id=?", (strategy_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_strategies(conn: sqlite3.Connection, mode: str = None) -> list[dict]:
+    """List strategies, optionally filtered by mode."""
+    if mode:
+        rows = conn.execute("SELECT * FROM strategy_registry WHERE mode=?", (mode,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM strategy_registry").fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_strategy_mode(conn: sqlite3.Connection, strategy_id: str, mode: str, reason: str = None) -> None:
+    """Transition a strategy's mode; always stamps mode_changed_at."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE strategy_registry SET mode=?, mode_changed_at=?, demotion_reason=?, updated_at=? WHERE id=?",
+        (mode, now, reason, now, strategy_id),
+    )
+    conn.commit()
+
+
+def log_backtest(conn: sqlite3.Connection, **kwargs) -> int:
+    """Record a backtest run. Returns the backtest ID."""
+    columns = ", ".join(kwargs.keys())
+    placeholders = ", ".join(["?"] * len(kwargs))
+    cursor = conn.execute(
+        f"INSERT INTO backtest_results ({columns}) VALUES ({placeholders})",
+        list(kwargs.values()),
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def upsert_strategy_performance(conn: sqlite3.Connection, strategy_id: str, **fields) -> None:
+    """Insert or update rolling performance metrics for a strategy."""
+    existing = conn.execute(
+        "SELECT strategy_id FROM strategy_performance WHERE strategy_id=?", (strategy_id,)
+    ).fetchone()
+    now = datetime.now(timezone.utc).isoformat()
+    fields["updated_at"] = now
+    if existing is None:
+        fields["strategy_id"] = strategy_id
+        cols = ", ".join(fields.keys())
+        placeholders = ", ".join(["?"] * len(fields))
+        conn.execute(
+            f"INSERT INTO strategy_performance ({cols}) VALUES ({placeholders})",
+            list(fields.values()),
+        )
+    else:
+        set_clause = ", ".join(f"{k}=?" for k in fields.keys())
+        conn.execute(
+            f"UPDATE strategy_performance SET {set_clause} WHERE strategy_id=?",
+            list(fields.values()) + [strategy_id],
+        )
+    conn.commit()
+
+
+def log_hypothesis(conn: sqlite3.Connection, **kwargs) -> int:
+    """Record a strategy hypothesis proposed by the self-improvement loop."""
+    columns = ", ".join(kwargs.keys())
+    placeholders = ", ".join(["?"] * len(kwargs))
+    cursor = conn.execute(
+        f"INSERT INTO strategy_hypotheses ({columns}) VALUES ({placeholders})",
+        list(kwargs.values()),
+    )
+    conn.commit()
+    return cursor.lastrowid
 
 
 if __name__ == "__main__":

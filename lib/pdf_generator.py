@@ -193,6 +193,91 @@ def build_section(title: str, content: str) -> list:
     ]
 
 
+def generate_daily_pdf(filepath: str, date_str: str, stats: dict, open_trades: list, metrics: dict) -> str:
+    """Render a daily performance PDF. Returns filepath on success."""
+    doc = create_report_doc(filepath, title=f"Daily Trading Report — {date_str}")
+    elements: list = []
+    elements += build_header("Daily Trading Report", subtitle=date_str)
+
+    pnl = stats.get("realized_pnl", 0) or 0
+    total = stats.get("total", 0)
+    wins = stats.get("wins", 0)
+    losses = stats.get("losses", 0)
+    wr = (wins / total * 100) if total else 0
+    sharpe = (metrics.get("overall") or {}).get("sharpe", 0) or 0
+
+    elements.append(build_metrics_table([
+        ("Trades", str(total), "neutral"),
+        ("Wins / Losses", f"{wins}W / {losses}L", "neutral"),
+        ("Win rate", f"{wr:.0f}%", "green" if wr >= 50 else "red"),
+        ("Realized P&L", f"${pnl:+,.2f}", "green" if pnl >= 0 else "red"),
+        ("Sharpe (rolling)", f"{sharpe:.2f}", "neutral"),
+        ("Open positions", str(len(open_trades)), "neutral"),
+    ]))
+    elements.append(Spacer(1, 6 * mm))
+
+    by_strat = (metrics.get("by_strategy") or {})
+    if by_strat:
+        elements += build_section("By strategy",
+            "<br/>".join(
+                f"{sid}: n={m.get('n',0)} pnl=${m.get('total_pnl',0):.2f} wr={m.get('win_rate',0)*100:.0f}%"
+                for sid, m in sorted(by_strat.items(), key=lambda kv: -kv[1].get("total_pnl", 0))
+            ),
+        )
+
+    if open_trades:
+        elements += build_section("Open positions", "")
+        elements.append(build_trades_table(open_trades))
+
+    elements += build_disclaimer()
+    doc.build(elements)
+    return filepath
+
+
+def generate_weekly_pdf(filepath: str, period: str, overall: dict, by_strategy: dict, strategies=None) -> str:
+    """Render a weekly performance PDF. Returns filepath on success.
+
+    Signature matches caller in generate_weekly_report.py:
+      generate_weekly_pdf(path, today, overall_metrics, by_strategy_metrics, strategies)
+    """
+    doc = create_report_doc(filepath, title=f"Weekly Trading Report - {period}")
+    elements: list = []
+    elements += build_header("Weekly Trading Report", subtitle=period)
+
+    overall = overall or {}
+    n = overall.get("trades", overall.get("n", 0)) or 0
+    wr = (overall.get("win_rate", 0) or 0) * (100 if (overall.get("win_rate", 0) or 0) <= 1 else 1)
+    pnl = overall.get("total_pnl", 0) or 0
+
+    elements.append(build_metrics_table([
+        ("Trades (7d)", str(n), "neutral"),
+        ("Win rate", f"{wr:.0f}%", "green" if wr >= 50 else "red"),
+        ("Realized P&L", f"${pnl:+,.2f}", "green" if pnl >= 0 else "red"),
+        ("Sharpe", f"{overall.get('sharpe', 0):.2f}", "neutral"),
+        ("Sortino", f"{overall.get('sortino', 0):.2f}", "neutral"),
+        ("Max DD", f"{overall.get('max_dd_pct', 0):.1f}%", "red"),
+        ("Grade", str(overall.get("grade", "?")), "gold"),
+    ]))
+    elements.append(Spacer(1, 6 * mm))
+
+    if by_strategy:
+        body = "<br/>".join(
+            f"{sid}: n={m.get('n',0)} pnl=${m.get('total_pnl',0):.2f} wr={m.get('win_rate',0)*100:.0f}%"
+            for sid, m in sorted(by_strategy.items(), key=lambda kv: -(kv[1] or {}).get("total_pnl", 0))
+        )
+        elements += build_section("By strategy", body)
+
+    if isinstance(strategies, str) and strategies.strip():
+        elements += build_section("Opus narrative", strategies.replace("\n", "<br/>"))
+    elif isinstance(strategies, dict) and strategies:
+        elements += build_section("Strategies",
+            "<br/>".join(f"{k}: {v}" for k, v in list(strategies.items())[:30]))
+
+    elements += build_disclaimer()
+    doc.build(elements)
+    return filepath
+
+
 def build_disclaimer() -> list:
     """Build the standard disclaimer footer."""
     styles = get_styles()
