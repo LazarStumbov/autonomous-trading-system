@@ -1,5 +1,7 @@
 """Execute trades on OKX. Places entry + SL + TP orders, logs everything to DB."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -11,6 +13,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from lib.db import get_connection, init_db, log_trade, log_signal
 from lib.constants import Pillar, TradeStatus
+from lib.paper_engine import is_paper_mode, simulate_order
 
 # OKX broker adapter — routed through the clean BrokerAdapter interface
 from lib.brokers.okx_adapter import get_exchange, OkxAdapter as _OkxAdapter
@@ -76,6 +79,27 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
             "take_profit": {"id": "dry_run_tp", "trigger": tp},
         }
         # Log to database even in dry run
+        _log_to_db(order, result)
+        return result
+
+    # ─── Paper-mode short circuit ─────────────────────────────────────────
+    # When PAPER_MODE=true, we never touch the exchange. Trades are
+    # simulated against the live public price feed, balance is tracked in
+    # system_state.paper_balance_usd, and position_monitor closes them when
+    # SL/TP is reached.
+    if is_paper_mode():
+        sim = simulate_order(order)
+        # Mirror simulated fields onto our result and DB-log it
+        result["status"] = sim["status"]
+        result["orders"] = sim["orders"]
+        result["errors"] = sim.get("errors", [])
+        result["paper"] = True
+        result["fill_price"] = sim.get("fill_price")
+        result["slippage_pct"] = sim.get("slippage_pct")
+        # Use the actual fill price for DB logging — that's where the trade
+        # really opens, not the intended entry_price.
+        if sim["status"] == "EXECUTED" and sim.get("fill_price"):
+            order = {**order, "entry_price": sim["fill_price"]}
         _log_to_db(order, result)
         return result
 
@@ -236,7 +260,10 @@ def _log_to_db(order: dict, result: dict):
             reasoning=order.get("reasoning", ""),
             risk_check_result=result["status"],
             opened_at=datetime.now(timezone.utc).isoformat(),
-            broker="okx_demo" if result.get("dry_run") else "okx",
+            broker=(
+                "paper" if result.get("paper")
+                else ("okx_demo" if result.get("dry_run") else "okx")
+            ),
         )
 
         result["trade_id"] = trade_id

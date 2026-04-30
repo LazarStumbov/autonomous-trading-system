@@ -18,6 +18,8 @@ Progressive trailing-stop tightening (crypto-scaled):
   tier-appropriate one once tier ≥1 is reached.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys
@@ -29,9 +31,18 @@ sys.path.insert(0, PROJECT_ROOT)
 from lib.db import get_connection, init_db, get_open_trades, close_trade, set_system_state, get_system_state
 from lib.risk_engine import load_risk_config
 from lib.category_cooldown import register_trade_close, asset_to_category
+from lib.paper_engine import is_paper_mode, get_public_price, credit_paper_balance, is_paper_trade
 
-sys.path.insert(0, os.path.dirname(__file__))
-from bybit_api import get_exchange, get_positions, get_ticker
+# Real-broker imports — only used when not in paper mode
+def get_exchange():
+    from lib.brokers.okx_adapter import get_exchange as _ge
+    return _ge()
+
+def get_positions(exchange):
+    return exchange.fetch_positions()
+
+def get_ticker(exchange, symbol: str) -> dict:
+    return exchange.fetch_ticker(symbol)
 
 
 # Progressive trailing tiers — (min_pnl_pct, trailing_distance_pct).
@@ -86,11 +97,16 @@ def monitor_positions(dry_run: bool = False) -> dict:
         conn.close()
         return {"status": "NO_POSITIONS", "positions": []}
 
-    exchange = get_exchange() if not dry_run else None
-    exchange_positions = get_positions(exchange) if exchange else []
+    paper = is_paper_mode()
 
-    # Build lookup of exchange positions by symbol
-    ex_pos_map = {p["symbol"]: p for p in exchange_positions}
+    if paper:
+        # Paper mode: no exchange queries, only public price fetches per-trade
+        exchange = None
+        ex_pos_map = {}
+    else:
+        exchange = get_exchange() if not dry_run else None
+        exchange_positions = get_positions(exchange) if exchange else []
+        ex_pos_map = {p["symbol"]: p for p in exchange_positions}
 
     results = []
 
@@ -111,7 +127,21 @@ def monitor_positions(dry_run: bool = False) -> dict:
         }
 
         # Get current price
-        if exchange:
+        if paper or is_paper_trade(trade):
+            # Paper-mode: fetch live public price; no exchange position to query
+            current_price = get_public_price(asset)
+            if current_price is None:
+                pos_result["actions"].append("PRICE_FETCH_FAILED")
+                results.append(pos_result)
+                continue
+            pos_result["current_price"] = current_price
+            # Estimate unrealized P&L for paper trades
+            qty = float(trade.get("quantity") or 0)
+            if direction == "long":
+                pos_result["unrealized_pnl"] = (current_price - entry) * qty
+            else:
+                pos_result["unrealized_pnl"] = (entry - current_price) * qty
+        elif exchange:
             ex_pos = ex_pos_map.get(asset)
             if ex_pos:
                 current_price = ex_pos["mark_price"]
@@ -238,6 +268,10 @@ def _close_position_in_db(conn, trade: dict, exit_price: float):
     pnl_pct = (pnl_usd / (entry * qty)) * 100
 
     close_trade(conn, trade["id"], exit_price, pnl_usd, pnl_pct)
+
+    # Paper-trade: credit/debit the virtual balance
+    if is_paper_trade(trade):
+        credit_paper_balance(pnl_usd, reason=f"trade #{trade['id']} {trade.get('asset','?')} {direction}")
 
     # Update consecutive losses (global circuit breaker)
     if pnl_usd < 0:

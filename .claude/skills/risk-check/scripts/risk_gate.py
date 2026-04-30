@@ -36,7 +36,17 @@ def run_risk_gate(trade_proposal: dict) -> dict:
         Dict with verdict, position sizing, and all check details.
     """
     config = load_risk_config()
-    capital = trade_proposal.get("capital", config["capital"]["initial_market_usd"])
+    # In paper-mode, use the dynamic virtual balance so position sizing
+    # tracks real wins/losses (compounding works as it would on a real account).
+    try:
+        from lib.paper_engine import is_paper_mode, get_paper_balance
+        if is_paper_mode():
+            default_capital = get_paper_balance()["total"]
+        else:
+            default_capital = config["capital"]["initial_market_usd"]
+    except Exception:
+        default_capital = config["capital"]["initial_market_usd"]
+    capital = trade_proposal.get("capital", default_capital)
 
     # ── Category-cooldown gate (runs BEFORE the heavyweight risk engine) ────
     # If this asset's category is on cooldown after consecutive losses, fail
