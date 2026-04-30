@@ -5,9 +5,9 @@
 #   1. modal CLI installed: pip install modal
 #   2. modal token configured: modal token new
 #   3. Modal secrets created in dashboard:
-#      - trading-broker-keys (BYBIT_API_KEY, BYBIT_SECRET_KEY, BYBIT_TESTNET)
+#      - trading-broker-keys (OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, OKX_DEMO)
 #      - trading-data-keys (ALPHA_VANTAGE_API_KEY, FINNHUB_API_KEY, COINMARKETCAP_API_KEY, MARKETAUX_API_KEY)
-#      - trading-ai-keys (ANTHROPIC_API_KEY)
+#      - trading-ai-keys (ANTHROPIC_API_KEY, PERPLEXITY_API_KEY)
 #      - trading-notification-keys (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 #
 # Usage:

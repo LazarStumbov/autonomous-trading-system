@@ -5,11 +5,16 @@ engine, screener, and execution engine route through `get_adapter_for(symbol)`
 so they remain broker-agnostic.
 
 Stage 4 status:
-  - crypto_perp / crypto_spot → BybitAdapter (real, ccxt)
+  - crypto_perp / crypto_spot → OkxAdapter (real, ccxt; OKX_DEMO=true → paper)
   - stock_equity / bond_etf   → AlpacaAdapter (stub — wire OAuth in Stage 4)
   - bond_future / forex_spot  → IBKRAdapter  (stub — wire IB Gateway in Stage 4)
   - cfd_*                     → CFDStubAdapter (placeholder; broker TBD)
   - polymarket_binary         → PolymarketAdapter (Stage 3)
+
+Broker change log:
+  2026-04: Switched from BybitAdapter → OkxAdapter. Bybit EU disabled
+  perpetual/derivative trading for retail clients under ESMA restrictions.
+  OKX supports USDT-margined perps with demo trading (OKX_DEMO=true).
 
 `is_enabled(asset_class)` is the gate every caller must respect; if the
 adapter exists but the asset class is disabled in `ASSET_CLASS_ENABLED`,
@@ -25,8 +30,8 @@ from lib.brokers.base import BrokerAdapter
 
 # Lazy imports to avoid pulling ccxt etc. when not needed.
 _REGISTRY: dict[AssetClass, str] = {
-    AssetClass.CRYPTO_PERP: "lib.brokers.bybit_adapter:BybitAdapter",
-    AssetClass.CRYPTO_SPOT: "lib.brokers.bybit_adapter:BybitAdapter",
+    AssetClass.CRYPTO_PERP: "lib.brokers.okx_adapter:OkxAdapter",
+    AssetClass.CRYPTO_SPOT: "lib.brokers.okx_adapter:OkxAdapter",
     AssetClass.STOCK_EQUITY: "lib.brokers.alpaca_adapter:AlpacaAdapter",
     AssetClass.BOND_ETF: "lib.brokers.alpaca_adapter:AlpacaAdapter",
     AssetClass.BOND_FUTURE: "lib.brokers.ibkr_adapter:IBKRAdapter",

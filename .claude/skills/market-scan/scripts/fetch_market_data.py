@@ -1,4 +1,4 @@
-"""Fetch OHLCV market data for all watchlist assets from Bybit via ccxt."""
+"""Fetch OHLCV market data for all watchlist assets from OKX via ccxt."""
 
 import argparse
 import json
@@ -9,9 +9,24 @@ from pathlib import Path
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
-sys.path.insert(0, os.path.join(PROJECT_ROOT, ".claude", "skills", "execute-trade", "scripts"))
 
-from bybit_api import get_exchange, get_ticker, fetch_ohlcv
+from lib.brokers.okx_adapter import get_exchange as _get_exchange
+
+
+def get_exchange(public_only: bool = False):
+    """Return OKX exchange instance. public_only=True skips auth for data-only calls."""
+    if public_only:
+        import ccxt  # type: ignore
+        return ccxt.okx({"options": {"defaultType": "swap"}, "enableRateLimit": True})
+    return _get_exchange()
+
+
+def get_ticker(exchange, symbol: str) -> dict:
+    return exchange.fetch_ticker(symbol)
+
+
+def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 100) -> list:
+    return exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
 
 
 def load_watchlist() -> dict:

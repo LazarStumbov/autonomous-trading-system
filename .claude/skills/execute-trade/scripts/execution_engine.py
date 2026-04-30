@@ -1,4 +1,4 @@
-"""Execute trades on Bybit. Places entry + SL + TP orders, logs everything to DB."""
+"""Execute trades on OKX. Places entry + SL + TP orders, logs everything to DB."""
 
 import argparse
 import json
@@ -12,9 +12,31 @@ sys.path.insert(0, PROJECT_ROOT)
 from lib.db import get_connection, init_db, log_trade, log_signal
 from lib.constants import Pillar, TradeStatus
 
-# Import sibling module
-sys.path.insert(0, os.path.dirname(__file__))
-from bybit_api import get_exchange, get_balance, set_leverage, set_margin_mode, get_ticker
+# OKX broker adapter — routed through the clean BrokerAdapter interface
+from lib.brokers.okx_adapter import get_exchange, OkxAdapter as _OkxAdapter
+
+def get_balance(exchange) -> dict:
+    """Compatibility shim: return {'free': float, 'total': float} from OKX balance."""
+    try:
+        raw = exchange.fetch_balance({"type": "swap"})
+        usdt = raw.get("USDT") or {}
+        if isinstance(usdt, dict):
+            return {"free": float(usdt.get("free") or 0), "total": float(usdt.get("total") or 0)}
+        return {"free": float(usdt or 0), "total": float(usdt or 0)}
+    except Exception:
+        return {"free": 0.0, "total": 0.0}
+
+def set_leverage(exchange, symbol: str, leverage: int) -> None:
+    exchange.set_leverage(leverage, symbol, {"mgnMode": "cross"})
+
+def set_margin_mode(exchange, symbol: str, mode: str) -> None:
+    try:
+        exchange.set_margin_mode(mode, symbol)
+    except Exception:
+        pass  # OKX may reject if mode already set
+
+def get_ticker(exchange, symbol: str) -> dict:
+    return exchange.fetch_ticker(symbol)
 
 
 def execute_order(order: dict, dry_run: bool = False) -> dict:
@@ -214,7 +236,7 @@ def _log_to_db(order: dict, result: dict):
             reasoning=order.get("reasoning", ""),
             risk_check_result=result["status"],
             opened_at=datetime.now(timezone.utc).isoformat(),
-            broker="bybit_testnet" if result.get("dry_run") else "bybit",
+            broker="okx_demo" if result.get("dry_run") else "okx",
         )
 
         result["trade_id"] = trade_id
