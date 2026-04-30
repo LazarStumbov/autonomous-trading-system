@@ -5,10 +5,32 @@
 #   1. modal CLI installed: pip install modal
 #   2. modal token configured: modal token new
 #   3. Modal secrets created in dashboard:
-#      - trading-broker-keys (OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, OKX_DEMO)
-#      - trading-data-keys (ALPHA_VANTAGE_API_KEY, FINNHUB_API_KEY, COINMARKETCAP_API_KEY, MARKETAUX_API_KEY)
-#      - trading-ai-keys (ANTHROPIC_API_KEY, PERPLEXITY_API_KEY)
-#      - trading-notification-keys (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+#      trading-broker-keys:
+#        PAPER_MODE=true                 # internal paper trading (no exchange)
+#        PAPER_STARTING_BALANCE=500
+#        PAPER_PRICE_EXCHANGE=okx
+#        OKX_API_KEY=...                 # optional while PAPER_MODE=true
+#        OKX_SECRET_KEY=...              # optional while PAPER_MODE=true
+#        OKX_PASSPHRASE=...              # optional while PAPER_MODE=true
+#        OKX_DEMO=true
+#      trading-data-keys:
+#        FINNHUB_API_KEY=...             # required - news + economic calendar
+#        ALPHA_VANTAGE_API_KEY=...       # optional
+#        COINMARKETCAP_API_KEY=...       # optional
+#        MARKETAUX_API_KEY=...           # optional
+#      trading-ai-keys:
+#        ANTHROPIC_API_KEY=...           # required
+#        PERPLEXITY_API_KEY=...          # optional - degrades to stub
+#      trading-notification-keys:
+#        TELEGRAM_BOT_TOKEN=...
+#        TELEGRAM_CHAT_ID=...
+#
+# To switch from paper to live:
+#   1. modal secret update trading-broker-keys --add PAPER_MODE=false
+#   2. modal secret update trading-broker-keys --add OKX_API_KEY=...
+#   3. modal secret update trading-broker-keys --add OKX_SECRET_KEY=...
+#   4. modal secret update trading-broker-keys --add OKX_PASSPHRASE=...
+#   5. bash modal/deploy.sh
 #
 # Usage:
 #   cd /path/to/Trading

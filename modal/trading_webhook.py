@@ -68,10 +68,16 @@ image = (
 )
 
 # Secrets (configure in Modal dashboard)
+# trading-broker-keys must include:
+#   PAPER_MODE=true|false               — internal paper trading switch
+#   PAPER_STARTING_BALANCE=500          — virtual capital, default 500 USD
+#   PAPER_PRICE_EXCHANGE=okx            — public exchange for prices
+#   OKX_API_KEY/SECRET_KEY/PASSPHRASE   — only required when PAPER_MODE=false
+#   OKX_DEMO=true|false                 — only matters when PAPER_MODE=false
 secrets = [
-    modal.Secret.from_name("trading-broker-keys"),      # BYBIT_API_KEY, BYBIT_SECRET_KEY
+    modal.Secret.from_name("trading-broker-keys"),       # PAPER_MODE, OKX_*, PAPER_*
     modal.Secret.from_name("trading-data-keys"),         # ALPHA_VANTAGE, FINNHUB, CMC, MARKETAUX
-    modal.Secret.from_name("trading-ai-keys"),           # ANTHROPIC_API_KEY
+    modal.Secret.from_name("trading-ai-keys"),           # ANTHROPIC_API_KEY (PERPLEXITY_API_KEY optional)
     modal.Secret.from_name("trading-notification-keys"), # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 ]
 
