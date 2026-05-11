@@ -437,6 +437,17 @@ def _finalize_trade(conn, trade: dict, exit_price: float):
     # Update daily P&L
     daily_pnl = float(get_system_state(conn, "daily_pnl_usd") or "0")
     set_system_state(conn, "daily_pnl_usd", str(daily_pnl + pnl_usd))
+
+    # Roll the per-strategy aggregates forward so self-improve, hypothesis_generator,
+    # and the dashboard see fresh win-rate / profit-factor / Sharpe immediately.
+    strategy_id = trade.get("strategy")
+    if strategy_id:
+        try:
+            from lib.strategy_tuner import refresh_strategy_performance
+            refresh_strategy_performance(conn, strategy_id)
+        except Exception as e:
+            print(f"[position_monitor] strategy_performance refresh failed for {strategy_id}: {e}")
+
     print(f"[position_monitor] finalized trade #{trade_id} {direction}: total pnl=${pnl_usd:+.2f}")
 
 

@@ -1,5 +1,7 @@
 """Confluence detector. Groups signals by asset and direction, counts independent signal sources."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -15,6 +17,57 @@ from lib.constants import SignalType
 from lib.db import get_connection, init_db
 
 
+def _load_json_safe(path: str) -> dict | list | None:
+    """Read JSON tolerating empty/corrupt files. Returns None if unusable.
+
+    Modal-synced volumes sometimes leave 0-byte placeholder files when a writer
+    fails mid-run; without this, a single bad file crashes the entire scoring
+    pipeline and the day's trades fall back to technicals-only.
+    """
+    try:
+        with open(path) as f:
+            text = f.read().strip()
+        if not text:
+            return None
+        return json.loads(text)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[confluence_detector] skipping {os.path.basename(path)}: {e}")
+        return None
+
+
+def _build_symbol_normalizer() -> dict[str, str]:
+    """Map bare symbols (e.g. 'BTC', 'DOGE') to canonical perp form ('BTC/USDT:USDT').
+
+    News and trader signals reference assets by their base symbol, while every
+    other layer of the system uses the canonical broker symbol. Without this
+    map, news/trader signals never group with the technical signals for the
+    same asset.
+    """
+    norm: dict[str, str] = {}
+    try:
+        with open(os.path.join(PROJECT_ROOT, "config", "watchlist.json")) as f:
+            wl = json.load(f).get("watchlist", {})
+        for symbols in wl.values():
+            if not isinstance(symbols, list):
+                continue
+            for s in symbols:
+                norm[s.upper()] = s
+                base = s.split("/")[0].upper()
+                # First canonical perp form wins (avoid forex_via_crypto stealing BTC)
+                if base and base not in norm and ":" in s:
+                    norm[base] = s
+    except Exception as e:
+        print(f"[confluence_detector] watchlist normalization unavailable: {e}")
+    return norm
+
+
+def _normalize_symbol(raw: str, norm: dict[str, str]) -> str:
+    """Resolve a bare symbol to its canonical form, or pass through unchanged."""
+    if not raw:
+        return ""
+    return norm.get(raw.upper(), raw)
+
+
 def load_signals_from_files(signals_dir: str = None) -> list[dict]:
     """Load all signals from today's signal files."""
     if signals_dir is None:
@@ -22,66 +75,63 @@ def load_signals_from_files(signals_dir: str = None) -> list[dict]:
         signals_dir = os.path.join(PROJECT_ROOT, "data", "signals", today)
 
     all_signals = []
+    norm = _build_symbol_normalizer()
 
     # Load from technicals
-    technicals_path = os.path.join(signals_dir, "technicals.json")
-    if os.path.exists(technicals_path):
-        with open(technicals_path) as f:
-            data = json.load(f).get("analysis", {})
-        for symbol, analysis in data.items():
-            for sig in analysis.get("signals", []):
-                all_signals.append({
-                    "symbol": symbol,
-                    "type": _classify_signal_type(sig.get("type", "")),
-                    "direction": "long" if sig.get("bias") == "bullish" else "short" if sig.get("bias") == "bearish" else None,
-                    "strength": 1.0,
-                    "source": "technical_analysis",
-                    "timeframe": sig.get("timeframe", ""),
-                    "detail": sig,
-                })
-
-    # Load from setups (screener output)
-    setups_path = os.path.join(signals_dir, "setups.json")
-    if os.path.exists(setups_path):
-        with open(setups_path) as f:
-            setups = json.load(f).get("setups", [])
-        for setup in setups:
+    technicals = _load_json_safe(os.path.join(signals_dir, "technicals.json")) or {}
+    for symbol, analysis in (technicals.get("analysis", {}) or {}).items():
+        for sig in analysis.get("signals", []):
             all_signals.append({
-                "symbol": setup["symbol"],
-                "type": SignalType.TECHNICAL_BREAKOUT,
-                "direction": setup["direction"],
-                "strength": setup.get("confidence", 50) / 100,
-                "source": f"screener_{setup['strategy']}",
-                "timeframe": setup.get("timeframe", ""),
-                "detail": setup,
+                "symbol": _normalize_symbol(symbol, norm),
+                "type": _classify_signal_type(sig.get("type", "")),
+                "direction": "long" if sig.get("bias") == "bullish" else "short" if sig.get("bias") == "bearish" else None,
+                "strength": 1.0,
+                "source": "technical_analysis",
+                "timeframe": sig.get("timeframe", ""),
+                "detail": sig,
             })
 
-    # Load from news signals (if exists)
-    news_path = os.path.join(signals_dir, "news_signals.json")
-    if os.path.exists(news_path):
-        with open(news_path) as f:
-            news = json.load(f)
-        for sig in news if isinstance(news, list) else news.get("signals", []):
+    # Load from setups (screener output)
+    setups_data = _load_json_safe(os.path.join(signals_dir, "setups.json")) or {}
+    for setup in setups_data.get("setups", []) if isinstance(setups_data, dict) else []:
+        all_signals.append({
+            "symbol": _normalize_symbol(setup["symbol"], norm),
+            "type": SignalType.TECHNICAL_BREAKOUT,
+            "direction": setup["direction"],
+            "strength": setup.get("confidence", 50) / 100,
+            "source": f"screener_{setup['strategy']}",
+            "timeframe": setup.get("timeframe", ""),
+            "detail": setup,
+        })
+
+    # News signals — urgency_classifier writes `asset` (bare e.g. "BTC"),
+    # not `symbol`. Accept both, and normalize bare symbols to canonical perps.
+    news_data = _load_json_safe(os.path.join(signals_dir, "news_signals.json"))
+    if news_data is not None:
+        news_iter = news_data if isinstance(news_data, list) else news_data.get("signals", [])
+        for sig in news_iter:
+            raw = sig.get("asset") or sig.get("symbol") or ""
             all_signals.append({
-                "symbol": sig.get("symbol", ""),
+                "symbol": _normalize_symbol(raw, norm),
                 "type": SignalType.NEWS_CATALYST,
                 "direction": sig.get("direction"),
-                "strength": sig.get("urgency", 0.5),
+                # urgency is 0-10; normalize to 0-1 so it composes with other strengths
+                "strength": min(1.0, float(sig.get("urgency", 5)) / 10.0),
                 "source": "news_monitor",
                 "detail": sig,
             })
 
-    # Load from trader signals (if exists)
-    trader_path = os.path.join(signals_dir, "trader_signals.json")
-    if os.path.exists(trader_path):
-        with open(trader_path) as f:
-            traders = json.load(f)
-        for sig in traders if isinstance(traders, list) else traders.get("signals", []):
+    # Trader signals — position_tracker also writes `asset`.
+    trader_data = _load_json_safe(os.path.join(signals_dir, "trader_signals.json"))
+    if trader_data is not None:
+        trader_iter = trader_data if isinstance(trader_data, list) else trader_data.get("signals", [])
+        for sig in trader_iter:
+            raw = sig.get("asset") or sig.get("symbol") or ""
             all_signals.append({
-                "symbol": sig.get("symbol", ""),
+                "symbol": _normalize_symbol(raw, norm),
                 "type": SignalType.TRADER_ACCUMULATION,
                 "direction": sig.get("direction"),
-                "strength": sig.get("skill_score", 0.5),
+                "strength": min(1.0, float(sig.get("skill_score", 0.5))),
                 "source": "signal_follow",
                 "detail": sig,
             })

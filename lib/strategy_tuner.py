@@ -123,30 +123,39 @@ def compute_metrics(trades: list[dict]) -> dict:
     }
 
 
+def refresh_strategy_performance(conn, strategy_id: str) -> None:
+    """Recompute the strategy_performance row for one strategy from its closed trades.
+
+    Called from position_monitor._finalize_trade right after a trade is marked
+    closed, so aggregated metrics (win rate, profit factor, etc.) never go stale
+    relative to the journal. Cheap — one strategy at a time, no full table scan.
+    """
+    strat = get_strategy(conn, strategy_id)
+    trades = _trades_for_strategy(conn, strategy_id)
+    m = compute_metrics(trades)
+    upsert_strategy_performance(
+        conn,
+        strategy_id,
+        mode=strat["mode"] if strat else "paper",
+        total_trades=m["total_trades"],
+        winning_trades=m.get("winning_trades", 0),
+        losing_trades=m.get("losing_trades", 0),
+        total_pnl_usd=m["total_pnl_usd"],
+        profit_factor=m["profit_factor"],
+        win_rate=m["win_rate"],
+        last_20_win_rate=m["last_20_win_rate"],
+        sharpe_30d=m["sharpe_30d"],
+        consecutive_losses=m["consecutive_losses"],
+        last_trade_at=trades[-1]["closed_at"] if trades else None,
+    )
+
+
 def refresh_all_performance() -> None:
-    """Recompute strategy_performance rows from the trade journal."""
+    """Recompute strategy_performance rows for every registered strategy."""
     conn = get_connection()
     try:
-        strategies = list_strategies(conn)
-        for s in strategies:
-            sid = s["id"]
-            trades = _trades_for_strategy(conn, sid)
-            m = compute_metrics(trades)
-            upsert_strategy_performance(
-                conn,
-                sid,
-                mode=s["mode"],
-                total_trades=m["total_trades"],
-                winning_trades=m.get("winning_trades", 0),
-                losing_trades=m.get("losing_trades", 0),
-                total_pnl_usd=m["total_pnl_usd"],
-                profit_factor=m["profit_factor"],
-                win_rate=m["win_rate"],
-                last_20_win_rate=m["last_20_win_rate"],
-                sharpe_30d=m["sharpe_30d"],
-                consecutive_losses=m["consecutive_losses"],
-                last_trade_at=trades[-1]["closed_at"] if trades else None,
-            )
+        for s in list_strategies(conn):
+            refresh_strategy_performance(conn, s["id"])
     finally:
         conn.close()
 
