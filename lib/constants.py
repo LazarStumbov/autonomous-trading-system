@@ -101,6 +101,30 @@ class AlertType(str, Enum):
 MIN_CONFLUENCE_SCORE = 60
 HIGH_CONFLUENCE_SCORE = 80
 
+
+def get_effective_min_score() -> float:
+    """Resolve the confluence threshold actually in use.
+
+    PAPER_MODE=true uses the loosened paper-mode override from risk_params.json
+    so the system can build a richer paper sample. Live mode uses the strict
+    MIN_CONFLUENCE_SCORE. Any caller that decides whether to act on an alert
+    MUST use this value, not the raw constant — otherwise tier labels and
+    execution gates can diverge.
+    """
+    import json
+    import os
+
+    if os.environ.get("PAPER_MODE", "").lower() != "true":
+        return float(MIN_CONFLUENCE_SCORE)
+    try:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        cfg_path = os.path.join(root, "config", "risk_params.json")
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        return float(cfg.get("paper_mode_overrides", {}).get("min_confluence_score", MIN_CONFLUENCE_SCORE))
+    except Exception:
+        return float(MIN_CONFLUENCE_SCORE)
+
 # Risk defaults
 DEFAULT_ATR_MULTIPLIER = 2.0
 DEFAULT_LEVERAGE = 3

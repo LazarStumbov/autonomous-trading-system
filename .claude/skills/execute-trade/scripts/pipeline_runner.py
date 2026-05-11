@@ -86,13 +86,16 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
     order_builder_mod = _import_from_path("order_builder", scripts_dir / "order_builder.py")
     execution_engine_mod = _import_from_path("execution_engine", scripts_dir / "execution_engine.py")
 
+    from lib.constants import get_effective_min_score
+    effective_min = get_effective_min_score()
+
     alerts = _load_alerts(alerts_path)
     if not alerts:
         print("[pipeline_runner] no alerts — nothing to do")
-        return {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0}
+        return {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0, "failed_tier": 0}
 
     capital = _get_capital()
-    stats = {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0}
+    stats = {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0, "failed_tier": 0}
 
     for alert in alerts:
         entry = alert.get("entry_price")
@@ -109,6 +112,19 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
         confluence = alert.get("confluence_score", 0)
         leverage = alert.get("suggested_leverage", 3)
         strategy = alert.get("strategy", "confluence")
+        tier = alert.get("tier")
+
+        # ── 0. Confluence gate (defense-in-depth) ─────────────────────────────
+        # alert_generator should already filter; we reject again here so a stale
+        # alerts.json or a future regression upstream can never silently execute
+        # a NO_TRADE setup.
+        if tier == "NO_TRADE" or confluence < effective_min:
+            print(
+                f"[pipeline_runner] TIER_FAIL {symbol} {direction} "
+                f"tier={tier} score={confluence} threshold={effective_min}"
+            )
+            stats["failed_tier"] += 1
+            continue
 
         # ── 1. Risk gate ──────────────────────────────────────────────────────
         try:

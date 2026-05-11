@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from lib.constants import MIN_CONFLUENCE_SCORE, HIGH_CONFLUENCE_SCORE
+from lib.constants import MIN_CONFLUENCE_SCORE, HIGH_CONFLUENCE_SCORE, get_effective_min_score
 
 
 def load_weights() -> dict:
@@ -69,10 +69,12 @@ def score_confluence(confluence: dict, weights: dict = None) -> dict:
     # Combine base and weighted
     final_score = min(100, max(0, (base_score + weighted_sum) / 2))
 
-    # Determine tier
+    # Determine tier against the threshold actually in use (paper-mode aware),
+    # so NO_TRADE consistently means "will not execute" across journal + gate.
+    effective_min = get_effective_min_score()
     if final_score >= HIGH_CONFLUENCE_SCORE:
         tier = "HIGH_CONVICTION"
-    elif final_score >= MIN_CONFLUENCE_SCORE:
+    elif final_score >= effective_min:
         tier = "STANDARD"
     else:
         tier = "NO_TRADE"
@@ -87,7 +89,7 @@ def score_confluence(confluence: dict, weights: dict = None) -> dict:
         "unique_signal_types": unique_types,
         "total_signals": len(signals),
         "breakdown": signal_breakdown,
-        "actionable": final_score >= MIN_CONFLUENCE_SCORE,
+        "actionable": final_score >= effective_min,
     }
 
 

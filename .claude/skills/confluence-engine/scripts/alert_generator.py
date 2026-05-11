@@ -10,21 +10,8 @@ from pathlib import Path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from lib.constants import MIN_CONFLUENCE_SCORE, HIGH_CONFLUENCE_SCORE
+from lib.constants import HIGH_CONFLUENCE_SCORE, get_effective_min_score
 from lib.db import get_connection, init_db, log_signal
-
-
-def _effective_min_score() -> float:
-    """Use paper-mode override when PAPER_MODE=true; otherwise the production threshold."""
-    if os.environ.get("PAPER_MODE", "").lower() != "true":
-        return MIN_CONFLUENCE_SCORE
-    try:
-        cfg_path = os.path.join(PROJECT_ROOT, "config", "risk_params.json")
-        with open(cfg_path) as f:
-            cfg = json.load(f)
-        return float(cfg.get("paper_mode_overrides", {}).get("min_confluence_score", MIN_CONFLUENCE_SCORE))
-    except Exception:
-        return MIN_CONFLUENCE_SCORE
 
 
 def generate_alerts(scored_path: str = None, setups_path: str = None) -> list[dict]:
@@ -60,7 +47,7 @@ def generate_alerts(scored_path: str = None, setups_path: str = None) -> list[di
                 setups_map[key] = s
 
     alerts = []
-    min_score = _effective_min_score()
+    min_score = get_effective_min_score()
 
     for setup in scored:
         # In paper mode min_score may be lower than the `actionable` flag set
