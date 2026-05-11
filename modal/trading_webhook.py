@@ -61,9 +61,23 @@ image = (
         "python-telegram-bot>=20.0",
         "fastapi[standard]>=0.115.0",
     )
+    # PYTHONPATH=/app so `from lib.X` and `from config import ...` resolve in
+    # subprocess'd skill scripts.
+    # PAPER_MODE=true is the default during the paper trading phase — secrets
+    # may override to "false" later when going live, but until then, the paper
+    # engine short-circuits in execution_engine before any OKX call.
+    .env({
+        "PYTHONPATH": "/app",
+        "PAPER_MODE": "true",
+        "PAPER_STARTING_BALANCE": "500",
+    })
     .add_local_dir("lib", remote_path="/app/lib")
     .add_local_dir("config", remote_path="/app/config")
-    .add_local_dir(".claude/skills", remote_path="/app/skills")
+    # Skill scripts compute PROJECT_ROOT by walking 4 `..` from their dirname.
+    # Locally that crosses the `.claude` layer to land on the repo root. To
+    # match that depth in Modal, preserve the `.claude/` layer: scripts at
+    # /app/.claude/skills/X/scripts/Y.py walk up to /app correctly.
+    .add_local_dir(".claude/skills", remote_path="/app/.claude/skills")
     .add_local_dir("memory", remote_path="/app/memory")
 )
 
@@ -81,6 +95,13 @@ secrets = [
     modal.Secret.from_name("trading-notification-keys"), # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 ]
 
+# Persistent volume holds: data/db/trading.db (strategy_registry, trades, signals,
+# api_costs, system_state), data/signals/<date>/ outputs, data/memory/ caches,
+# data/reports/ PDFs. Without this, every cron container starts with an empty DB
+# — no strategies registered, no trade history, nothing carries between runs.
+data_volume = modal.Volume.from_name("trading-data", create_if_missing=True)
+volumes = {"/app/data": data_volume}
+
 
 # ============================================================
 # CRON JOBS - The autonomous backbone
@@ -89,6 +110,7 @@ secrets = [
 @app.function(
     image=image,
     secrets=secrets,
+    volumes=volumes,
     schedule=modal.Cron("*/15 * * * *"),  # Every 15 minutes
     timeout=300,
 )
@@ -98,7 +120,7 @@ def news_scan():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running news scan...")
 
-    news_base = "/app/skills/news-monitor/scripts"
+    news_base = "/app/.claude/skills/news-monitor/scripts"
     _run(f"{news_base}/news_aggregator.py", timeout=120)
     _run(f"{news_base}/geopolitical_scanner.py", timeout=60)
     _run(f"{news_base}/sentiment_scorer.py", timeout=120)
@@ -106,11 +128,17 @@ def news_scan():
 
     # If any urgent setups emitted, run the hot path immediately
     if r["ok"] and "urgent=true" in (r["stdout"] or ""):
-        print("  URGENT news detected → running immediate confluence + risk + execute")
-        _run("/app/skills/confluence-engine/scripts/confluence_detector.py", timeout=120)
-        _run("/app/skills/risk-check/scripts/risk_gate.py", timeout=60)
-        _run("/app/skills/execute-trade/scripts/execution_engine.py", "--source=news", timeout=120)
+        print("  URGENT news detected → running immediate confluence + alerts + pipeline")
+        _run("/app/.claude/skills/confluence-engine/scripts/confluence_detector.py", timeout=120)
+        _run("/app/.claude/skills/confluence-engine/scripts/score_setup.py", timeout=60)
+        _run("/app/.claude/skills/confluence-engine/scripts/alert_generator.py", timeout=60)
+        _run("/app/.claude/skills/execute-trade/scripts/pipeline_runner.py", timeout=180)
         _notify(f"⚡ URGENT news-driven trade evaluated at {timestamp}")
+
+    # PM wallet activity poll — cheap, no LLM. Catches new sharp-money entries
+    # between hourly market_scan PM passes.
+    pm = "/app/.claude/skills/polymarket-bet/scripts"
+    _run(f"{pm}/track_wallet_activity.py", timeout=90)
 
     print(f"[{timestamp}] News scan complete")
 
@@ -118,6 +146,7 @@ def news_scan():
 @app.function(
     image=image,
     secrets=secrets,
+    volumes=volumes,
     schedule=modal.Cron("0 * * * *"),  # Every hour
     timeout=600,
 )
@@ -127,25 +156,35 @@ def market_scan():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running market scan...")
 
-    scan = "/app/skills/market-scan/scripts"
-    conf = "/app/skills/confluence-engine/scripts"
-    risk = "/app/skills/risk-check/scripts"
-    ex   = "/app/skills/execute-trade/scripts"
-    sig  = "/app/skills/signal-follow/scripts"
+    scan = "/app/.claude/skills/market-scan/scripts"
+    conf = "/app/.claude/skills/confluence-engine/scripts"
+    ex   = "/app/.claude/skills/execute-trade/scripts"
+    sig  = "/app/.claude/skills/signal-follow/scripts"
 
     _run(f"{scan}/fetch_market_data.py", timeout=180)
     _run(f"{scan}/technical_analysis.py", timeout=120)
     _run(f"{scan}/support_resistance.py", timeout=60)
     _run(f"{sig}/position_tracker.py", timeout=60)
-    # screener.py runs every strategy in live+paper mode against every symbol
-    _run(f"{scan}/screener.py", "--mode-filter", "live", timeout=180)
+    # Filter to "paper" since 65 strategies are in paper mode and 0 in live —
+    # this is exactly the dataset we're trying to grow during paper trading.
+    _run(f"{scan}/screener.py", "--mode-filter", "paper", timeout=180)
     _run(f"{conf}/confluence_detector.py", timeout=120)
     _run(f"{conf}/score_setup.py", timeout=60)
-    # risk_gate reads setups.json, emits a filtered list of approved trades
-    r_risk = _run(f"{risk}/risk_gate.py", timeout=60)
-    if r_risk["ok"]:
-        _run(f"{ex}/execution_engine.py", "--source=market_scan", timeout=180)
-        _run(f"{ex}/position_monitor.py", timeout=60)
+    # alert_generator merges scored confluences with screener entry/SL/TP into alerts.json
+    _run(f"{conf}/alert_generator.py", timeout=60)
+    # pipeline_runner reads alerts.json, runs each through risk_gate → order_builder → executor
+    _run(f"{ex}/pipeline_runner.py", timeout=180)
+    _run(f"{ex}/position_monitor.py", timeout=60)
+
+    # Polymarket pillar — full hot-path. Cheap unless candidates clear the
+    # confluence gate, in which case Perplexity fires (capped at PM_MAX_LLM_CALLS).
+    pm = "/app/.claude/skills/polymarket-bet/scripts"
+    _run(f"{pm}/discover_markets.py", timeout=120)
+    _run(f"{pm}/track_wallet_activity.py", timeout=90)
+    _run(f"{pm}/signal_engine.py", timeout=60)
+    _run(f"{pm}/estimate_probability.py", timeout=300)
+    _run(f"{pm}/risk_gate_pm.py", timeout=60)
+    _run(f"{pm}/execute_bet.py", timeout=120)
 
     print(f"[{timestamp}] Market scan complete")
 
@@ -153,6 +192,7 @@ def market_scan():
 @app.function(
     image=image,
     secrets=secrets,
+    volumes=volumes,
     schedule=modal.Cron("0 8 * * *"),  # Daily at 08:00 UTC — before EU/US sessions open
     timeout=900,
 )
@@ -169,7 +209,7 @@ def opus_daily_brief():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running Opus 4.7 daily brief...")
 
-    news = "/app/skills/news-monitor/scripts"
+    news = "/app/.claude/skills/news-monitor/scripts"
     # Step 1: Refresh Perplexity research log (six topics, each independent).
     _run(f"{news}/research_log.py", timeout=300)
     # Step 2: Single Opus 4.7 call that consumes the research + open positions
@@ -182,7 +222,7 @@ def opus_daily_brief():
 # NOTE: nightly_learning merged into weekly_review to stay under Modal's 5-cron
 # free-plan limit. Defined as manual-trigger only here. Tuner runs hourly inside
 # market_scan; promotion gate runs weekly.
-@app.function(image=image, secrets=secrets, timeout=1800)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=1800)
 def nightly_learning():
     """Nightly learning — manual trigger only (no cron). Use weekly_review instead."""
     os.chdir("/app")
@@ -193,21 +233,34 @@ def nightly_learning():
     _notify(f"🌙 Nightly learning pass complete at {timestamp}")
 
 
-# NOTE: polymarket_scan removed from cron schedule — Stage 3, function defined
-# below as a manual-trigger only (no schedule) so it doesn't count against the
-# 5-cron Modal limit. Re-enable a schedule once Stage 3 lands.
-@app.function(image=image, secrets=secrets, timeout=600)
+# NOTE: polymarket_scan stays manual-trigger only to keep within Modal's 5-cron
+# free-plan limit. The PM pipeline is hooked into existing crons:
+#   news_scan       (every 15 min) → wallet activity poll
+#   market_scan     (hourly)       → full PM hot-path
+#   daily_report    (21:00 UTC)    → late-stage convergence sweep
+#   weekly_review   (Sun 12:00)    → wallet leaderboard refresh
+# This function is the same hot-path callable on demand from the slash command.
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=900)
 def polymarket_scan():
-    """Polymarket scan — Stage 3 stub. Manual trigger only (no cron)."""
+    """Polymarket pipeline — manual trigger (also reused from cron hooks)."""
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
-    print(f"[{timestamp}] Polymarket scan (stub — Stage 3 implementation deferred)")
-    _run("/app/skills/polymarket-bet/scripts/polymarket_bet_stub.py", timeout=30)
+    print(f"[{timestamp}] Polymarket scan starting")
+    pm = "/app/.claude/skills/polymarket-bet/scripts"
+    _run(f"{pm}/discover_markets.py", timeout=120)
+    _run(f"{pm}/track_wallet_activity.py", timeout=120)
+    _run(f"{pm}/signal_engine.py", timeout=60)
+    _run(f"{pm}/estimate_probability.py", timeout=300)
+    _run(f"{pm}/risk_gate_pm.py", timeout=60)
+    _run(f"{pm}/execute_bet.py", timeout=120)
+    _notify(f"🎯 Polymarket scan complete at {timestamp[:16]}")
+    print(f"[{timestamp}] Polymarket scan complete")
 
 
 @app.function(
     image=image,
     secrets=secrets,
+    volumes=volumes,
     schedule=modal.Cron("0 21 * * *"),  # Daily at 21:00 UTC
     timeout=600,
 )
@@ -217,8 +270,8 @@ def daily_report():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Generating daily report...")
 
-    perf = "/app/skills/performance-report/scripts"
-    imp  = "/app/skills/self-improve/scripts"
+    perf = "/app/.claude/skills/performance-report/scripts"
+    imp  = "/app/.claude/skills/self-improve/scripts"
 
     # Ingest any Opus reviews the user pasted into reviews/completed/ since
     # yesterday's run. Validated hypotheses land in strategy_hypotheses table
@@ -235,6 +288,16 @@ def daily_report():
     # the Claude UI (subscription) and feed Opus's verdict back via ingest.
     _run(f"{imp}/trade_review_packet.py", timeout=60)
 
+    # Late-stage Polymarket convergence sweep — concentrate on markets at
+    # 90-95c resolving in 1-7 days. Reuses the standard PM pipeline with a
+    # tighter pre-filter.
+    pm = "/app/.claude/skills/polymarket-bet/scripts"
+    _run(f"{pm}/discover_markets.py", timeout=120)
+    _run(f"{pm}/signal_engine.py", timeout=60)
+    _run(f"{pm}/estimate_probability.py", timeout=300)
+    _run(f"{pm}/risk_gate_pm.py", timeout=60)
+    _run(f"{pm}/execute_bet.py", timeout=120)
+
     summary_path = "/app/data/reports/latest_daily_summary.txt"
     summary = ""
     if os.path.exists(summary_path):
@@ -248,6 +311,7 @@ def daily_report():
 @app.function(
     image=image,
     secrets=secrets,
+    volumes=volumes,
     schedule=modal.Cron("0 12 * * 0"),  # Sunday at 12:00 UTC
     timeout=900,
 )
@@ -257,9 +321,9 @@ def weekly_review():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running weekly review...")
 
-    perf = "/app/skills/performance-report/scripts"
-    imp  = "/app/skills/self-improve/scripts"
-    sig  = "/app/skills/signal-follow/scripts"
+    perf = "/app/.claude/skills/performance-report/scripts"
+    imp  = "/app/.claude/skills/self-improve/scripts"
+    sig  = "/app/.claude/skills/signal-follow/scripts"
 
     _run(f"{perf}/performance_metrics.py", "--period", "weekly", timeout=120)
     _run(f"{perf}/generate_weekly_report.py", timeout=180)
@@ -269,6 +333,10 @@ def weekly_review():
     _run(f"{imp}/hypothesis_generator.py", "--auto-apply", timeout=600)
     # Newly proposed strategies sit at mode=backtest — evaluate them immediately
     _run("/app/lib/backtester.py", "--promote-all", "--days", "90", timeout=1800)
+
+    # Polymarket: weekly leaderboard refresh + wallet-graph clustering. Updates
+    # config/polymarket_accounts.json::tracked_accounts.
+    _run("/app/.claude/skills/polymarket-bet/scripts/discover_wallets.py", timeout=600)
 
     summary_path = "/app/data/reports/latest_weekly_summary.txt"
     summary = ""
@@ -284,7 +352,7 @@ def weekly_review():
 # WEB ENDPOINTS - For external triggers
 # ============================================================
 
-@app.function(image=image, secrets=secrets, timeout=300)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=300)
 @modal.fastapi_endpoint(method="POST")
 def tradingview_alert(data: dict):
     """Receive TradingView webhook alerts."""
@@ -305,18 +373,18 @@ def tradingview_alert(data: dict):
     with open(alert_dir / "tv_alert.json", "w") as f:
         json.dump(data, f)
 
-    tv = "/app/skills/tradingview-analysis/scripts"
+    tv = "/app/.claude/skills/tradingview-analysis/scripts"
     _run(f"{tv}/alert_parser.py", "--input", str(alert_dir / "tv_alert.json"), timeout=60)
     _run(f"{tv}/indicator_mapper.py", timeout=60)
-    _run("/app/skills/confluence-engine/scripts/confluence_detector.py", timeout=120)
-    r_risk = _run("/app/skills/risk-check/scripts/risk_gate.py", timeout=60)
+    _run("/app/.claude/skills/confluence-engine/scripts/confluence_detector.py", timeout=120)
+    r_risk = _run("/app/.claude/skills/risk-check/scripts/risk_gate.py", timeout=60)
     if r_risk["ok"]:
-        _run("/app/skills/execute-trade/scripts/execution_engine.py", "--source=tradingview", timeout=120)
+        _run("/app/.claude/skills/execute-trade/scripts/execution_engine.py", "--source=tradingview", timeout=120)
 
     return {"status": "processed", "timestamp": timestamp}
 
 
-@app.function(image=image, secrets=secrets, timeout=60)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)
 @modal.fastapi_endpoint(method="GET")
 def status():
     """System health check and current portfolio status."""
@@ -353,7 +421,7 @@ def status():
     }
 
 
-@app.function(image=image, secrets=secrets, timeout=300)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=300)
 @modal.fastapi_endpoint(method="POST")
 def manual_trade(data: dict):
     """Execute a trade manually via API. Still goes through the risk gate."""
@@ -376,14 +444,14 @@ def manual_trade(data: dict):
     with open(manual_path, "w") as f:
         json.dump({**data, "source": "manual", "timestamp": datetime.now(timezone.utc).isoformat()}, f)
 
-    r_risk = _run("/app/skills/risk-check/scripts/risk_gate.py", "--input", str(manual_path), timeout=60)
+    r_risk = _run("/app/.claude/skills/risk-check/scripts/risk_gate.py", "--input", str(manual_path), timeout=60)
     if not r_risk["ok"]:
         return {"status": "risk_rejected", "detail": r_risk["stderr"]}
-    r_ex = _run("/app/skills/execute-trade/scripts/execution_engine.py", "--source=manual", "--input", str(manual_path), timeout=120)
+    r_ex = _run("/app/.claude/skills/execute-trade/scripts/execution_engine.py", "--source=manual", "--input", str(manual_path), timeout=120)
     return {"status": "executed" if r_ex["ok"] else "exec_failed", "stdout": r_ex["stdout"][-500:]}
 
 
-@app.function(image=image, secrets=secrets, timeout=60)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)
 @modal.fastapi_endpoint(method="POST")
 def halt_trading(data: dict):
     """Emergency halt all trading."""
@@ -406,7 +474,7 @@ def halt_trading(data: dict):
     return {"status": "halted", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
-@app.function(image=image, secrets=secrets, timeout=60)
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)
 @modal.fastapi_endpoint(method="POST")
 def resume_trading(data: dict):
     """Resume trading after halt."""
@@ -428,3 +496,29 @@ def resume_trading(data: dict):
         return {"status": "error", "message": str(e)}
     _notify("✅ Trading resumed via admin endpoint")
     return {"status": "resumed", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)
+@modal.fastapi_endpoint(method="POST")
+def telegram_webhook(data: dict):
+    """Receive Telegram bot updates and dispatch commands.
+
+    Register this URL with Telegram once after deploying:
+      curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \\
+           -H "Content-Type: application/json" \\
+           -d '{"url": "https://<modal-app-url>/telegram-webhook"}'
+
+    Supported commands (send as plain text or with / prefix):
+      status update / status / /status  → open positions snapshot
+      pnl / /pnl                        → today's realized P&L
+      help / /help                      → command list
+    """
+    os.chdir("/app")
+    sys.path.insert(0, "/app")
+    try:
+        from lib.telegram_bot import handle_update
+        handle_update(data)
+    except Exception as e:
+        print(f"[telegram_webhook] error: {e}")
+    # Always return 200 so Telegram doesn't retry
+    return {"ok": True}

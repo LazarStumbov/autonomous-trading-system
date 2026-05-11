@@ -8,7 +8,11 @@
       "XRP/USDT:USDT",
       "AVAX/USDT:USDT",
       "LINK/USDT:USDT",
-      "ADA/USDT:USDT"
+      "ADA/USDT:USDT",
+      "ARB/USDT:USDT",
+      "OP/USDT:USDT",
+      "SUI/USDT:USDT",
+      "WIF/USDT:USDT"
     ],
     "crypto_spot": [
       "BTC/USDT",

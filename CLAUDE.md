@@ -18,64 +18,9 @@ You are a hedge-fund caliber autonomous trading agent operating two pillars with
 - Kelly criterion (quarter-Kelly) for bet sizing
 - Deep news research to estimate true probabilities
 
-### Skills Architecture (same pattern as Claude Skills Demo)
+### Skills & Subagents
 
-Skills live in `.claude/skills/`. Each skill = `SKILL.md` instructions + `scripts/` folder. You auto-discover and invoke based on task context. Self-contained: each skill has everything it needs.
-
-**Available Skills:**
-- `market-scan` — Pull prices, run technical analysis, detect setups
-- `news-monitor` — 15-min news cycle, urgency scoring, geopolitical detection
-- `signal-follow` — Track top Bybit traders, generate copy signals
-- `confluence-engine` — Cross-source signal alignment, confidence scoring (0-100)
-- `risk-check` — PASS/FAIL gate before ANY trade (veto power)
-- `execute-trade` — Place orders via Bybit, manage SL/TP/trailing
-- `polymarket-bet` — PM CLOB integration, edge detection, Kelly sizing
-- `tradingview-analysis` — Receive and process TradingView alerts
-- `performance-report` — P&L tracking, metrics, PDF reports
-- `self-improve` — Post-mortem analysis, parameter tuning
-
-### Subagents (Sonnet, cost-efficient, unbiased)
-
-Subagents are read-only reporters. All code changes and trade executions happen in the parent agent.
-
-- `market-analyst` — Technical + fundamental analysis, ranks setups
-- `news-monitor` — News scanning, urgency scoring
-- `risk-manager` — Pre-trade validation gate (has VETO power, zero context about trade attractiveness)
-- `trade-executor` — Order placement and position management
-- `polymarket-analyst` — Probability estimation, edge calculation
-- `signal-tracker` — Track followed accounts, aggregate signals
-- `performance-reviewer` — Post-trade analysis, strategy tuning suggestions
-
----
-
-## Decision Loop (Autonomous via Modal Cron)
-
-### Every 15 minutes
-1. `news-monitor`: Scan for breaking news requiring immediate action
-2. If urgent news detected -> `confluence-engine` + `risk-check` + `execute-trade`
-
-### Every 1 hour
-1. `market-scan`: Pull fresh data for watchlist
-2. `signal-follow`: Check followed accounts for new positions
-3. `confluence-engine`: Run convergence detection
-4. If high-confluence setup (score >= 60) -> `risk-check` -> `execute-trade`
-
-### Every 4 hours
-1. `polymarket-bet`: Scan for mispriced markets
-2. Account tracker: Check top PM accounts for new bets
-3. Edge calculator: Calculate edges on candidate bets
-4. If edge > 5% -> `risk-check` -> bet executor
-
-### Daily (21:00 UTC)
-1. `performance-report`: Generate daily P&L report
-2. `self-improve`: Analyze today's trades, update memory
-3. Send summary via Telegram/Slack
-
-### Weekly (Sunday 12:00 UTC)
-1. `performance-report`: Weekly summary with Sharpe, Sortino, win rate
-2. `self-improve`: Retune strategy parameters
-3. Rebalance trader/account follow lists
-4. Update skill scores for all followed accounts
+Skills live in `.claude/skills/` (auto-discovered). Subagents are read-only reporters — all code changes and trade executions happen in the parent agent. Cron schedules are defined in `modal/trading_webhook.py`.
 
 ---
 

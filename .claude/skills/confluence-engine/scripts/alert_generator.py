@@ -14,6 +14,19 @@ from lib.constants import MIN_CONFLUENCE_SCORE, HIGH_CONFLUENCE_SCORE
 from lib.db import get_connection, init_db, log_signal
 
 
+def _effective_min_score() -> float:
+    """Use paper-mode override when PAPER_MODE=true; otherwise the production threshold."""
+    if os.environ.get("PAPER_MODE", "").lower() != "true":
+        return MIN_CONFLUENCE_SCORE
+    try:
+        cfg_path = os.path.join(PROJECT_ROOT, "config", "risk_params.json")
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        return float(cfg.get("paper_mode_overrides", {}).get("min_confluence_score", MIN_CONFLUENCE_SCORE))
+    except Exception:
+        return MIN_CONFLUENCE_SCORE
+
+
 def generate_alerts(scored_path: str = None, setups_path: str = None) -> list[dict]:
     """Generate actionable alerts from scored confluences + screener setups.
 
@@ -47,9 +60,12 @@ def generate_alerts(scored_path: str = None, setups_path: str = None) -> list[di
                 setups_map[key] = s
 
     alerts = []
+    min_score = _effective_min_score()
 
     for setup in scored:
-        if not setup["actionable"]:
+        # In paper mode min_score may be lower than the `actionable` flag set
+        # at scoring time — fall back to the score directly.
+        if setup["score"] < min_score:
             continue
 
         symbol = setup["symbol"]

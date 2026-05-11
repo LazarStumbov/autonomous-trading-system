@@ -57,3 +57,8 @@ reviews/archive/
 data/backtests/
 data/hypotheses/
 data/memory/
+
+# Pre-system research artifacts (kept locally, excluded from git)
+Daily Market Overview/
+Daily market briefing/
+Iran crisis/
