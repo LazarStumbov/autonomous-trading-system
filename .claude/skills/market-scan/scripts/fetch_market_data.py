@@ -11,6 +11,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 
 from lib.brokers.okx_adapter import get_exchange as _get_exchange
+from lib.paper_engine import get_public_ohlcv as _yahoo_ohlcv, get_public_price as _yahoo_price, _YAHOO_TICKER_MAP
 
 
 def get_exchange(public_only: bool = False):
@@ -21,11 +22,20 @@ def get_exchange(public_only: bool = False):
     return _get_exchange()
 
 
+def _is_cfd_symbol(symbol: str) -> bool:
+    return symbol.upper() in _YAHOO_TICKER_MAP
+
+
 def get_ticker(exchange, symbol: str) -> dict:
+    if _is_cfd_symbol(symbol):
+        px = _yahoo_price(symbol)
+        return {"last": px, "symbol": symbol} if px else {"error": "yahoo fetch failed"}
     return exchange.fetch_ticker(symbol)
 
 
 def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 100) -> list:
+    if _is_cfd_symbol(symbol):
+        return _yahoo_ohlcv(symbol, timeframe, limit) or []
     return exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
 
 

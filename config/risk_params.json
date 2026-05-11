@@ -11,7 +11,7 @@
       "default": 3,
       "high_conviction_min_confluence": 80,
       "high_conviction_max": 10,
-      "absolute_max": 10
+      "absolute_max": 15
     },
     "stop_loss": {
       "default_atr_multiplier": 2.0,
@@ -21,8 +21,26 @@
     },
     "take_profit": {
       "default_rr_ratio": 2.0,
-      "partial_tp_at_1r_pct": 50,
-      "let_remainder_run_with_trailing": true
+      "tp_tiers": [
+        {
+          "r": 1.0,
+          "close_pct": 40,
+          "sl_action": "breakeven"
+        },
+        {
+          "r": 2.0,
+          "close_pct": 35,
+          "sl_action": "lock_1r"
+        },
+        {
+          "r": 3.5,
+          "close_pct": 15,
+          "sl_action": "activate_trail"
+        }
+      ],
+      "runner_close_pct": 10,
+      "let_remainder_run_with_trailing": true,
+      "time_stop_hours": 8
     },
     "circuit_breakers": {
       "halt_after_consecutive_losses": 3,
@@ -49,5 +67,14 @@
     "initial_market_usd": 250,
     "initial_polymarket_usd": 250,
     "rebalance_threshold_pct": 20
+  },
+  "paper_mode_overrides": {
+    "_comment": "Loosened parameters applied only when PAPER_MODE=true, to generate a richer paper trade sample for review. Live trading uses the strict values above. The 250% exposure ceiling allows 2-3 concurrent full-notional positions; with 3x leverage that's ~83% margin usage which is acceptable for virtual capital.",
+    "min_confluence_score": 50,
+    "min_risk_reward_ratio": 1.5,
+    "max_portfolio_exposure_pct": 250.0,
+    "max_daily_drawdown_pct": 20.0,
+    "initial_market_usd": 500,
+    "polymarket_min_confluence_score": 40
   }
 }

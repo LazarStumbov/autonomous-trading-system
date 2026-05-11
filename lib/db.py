@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS trades (
     quantity REAL NOT NULL,
     leverage REAL DEFAULT 1.0,
     stop_loss REAL,
+    initial_sl REAL,
     take_profit REAL,
     status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'cancelled')) DEFAULT 'open',
     pnl_usd REAL,
@@ -189,6 +190,22 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     notes TEXT
 );
 
+-- Partial closes: each scale-out tier executed against an open trade.
+-- A single trade row may produce 3 TP tier rows + 1 runner row + 1 SL/time-stop row.
+-- UNIQUE(trade_id, tier) prevents the same tier from firing twice.
+CREATE TABLE IF NOT EXISTS partial_closes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id INTEGER NOT NULL REFERENCES trades(id),
+    tier INTEGER NOT NULL,
+    tier_label TEXT,
+    exit_price REAL NOT NULL,
+    quantity_closed REAL NOT NULL,
+    pnl_usd REAL NOT NULL,
+    closed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(trade_id, tier)
+);
+CREATE INDEX IF NOT EXISTS idx_partial_closes_trade ON partial_closes(trade_id);
+
 -- Strategy hypotheses proposed by the self-improvement loop
 CREATE TABLE IF NOT EXISTS strategy_hypotheses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -287,6 +304,46 @@ def get_open_trades(conn: sqlite3.Connection, pillar: str = None) -> list[dict]:
         params.append(pillar)
     rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def log_partial_close(
+    conn: sqlite3.Connection,
+    trade_id: int,
+    tier: int,
+    tier_label: str,
+    exit_price: float,
+    quantity_closed: float,
+    pnl_usd: float,
+) -> int:
+    """Record a partial scale-out against an open trade. Idempotent on (trade_id, tier)."""
+    cursor = conn.execute(
+        """INSERT OR IGNORE INTO partial_closes
+           (trade_id, tier, tier_label, exit_price, quantity_closed, pnl_usd, closed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (trade_id, tier, tier_label, exit_price, quantity_closed, pnl_usd,
+         datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_partial_closes(conn: sqlite3.Connection, trade_id: int) -> list[dict]:
+    """Return all partial closes for a trade, ordered by tier ascending."""
+    rows = conn.execute(
+        "SELECT * FROM partial_closes WHERE trade_id=? ORDER BY tier ASC",
+        (trade_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_remaining_quantity(conn: sqlite3.Connection, trade_id: int, initial_qty: float) -> float:
+    """Compute remaining open quantity = initial - sum(partial_closes.quantity_closed)."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(quantity_closed), 0) FROM partial_closes WHERE trade_id=?",
+        (trade_id,),
+    ).fetchone()
+    closed = float(row[0] or 0)
+    return max(0.0, initial_qty - closed)
 
 
 def log_signal(conn: sqlite3.Connection, **kwargs) -> int:

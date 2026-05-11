@@ -8,8 +8,31 @@ import sys
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from lib.risk_engine import calculate_position_size, check_leverage
+from lib.risk_engine import calculate_position_size, check_leverage, load_risk_config
 from lib.constants import Direction
+
+
+def compute_tp_tiers(entry: float, stop_loss: float, direction: str, tp_tiers_cfg: list) -> list[dict]:
+    """Translate r-multiple tier config into absolute trigger prices.
+
+    For each tier {r, close_pct, sl_action} returns the price the position
+    should partial-close at. Long: entry + r*risk_distance. Short: entry - r*risk_distance.
+    """
+    risk_distance = abs(entry - stop_loss)
+    if risk_distance == 0:
+        return []
+    sign = 1 if direction == "long" else -1
+    out = []
+    for tier in tp_tiers_cfg:
+        r = float(tier["r"])
+        price = entry + sign * r * risk_distance
+        out.append({
+            "r": r,
+            "close_pct": float(tier["close_pct"]),
+            "sl_action": tier.get("sl_action"),
+            "trigger_price": round(price, 8),
+        })
+    return out
 
 
 def build_order(
@@ -50,8 +73,8 @@ def build_order(
     if "error" in sizing:
         return sizing
 
-    # Leverage validation
-    lev_check = check_leverage(leverage, confluence_score)
+    # Leverage validation (per-asset cap when applicable)
+    lev_check = check_leverage(leverage, confluence_score, asset_symbol=asset)
     approved_leverage = lev_check["approved"]
 
     # Calculate notional value
@@ -64,6 +87,13 @@ def build_order(
     reward_distance = abs(take_profit_price - entry_price)
     rr_ratio = reward_distance / risk_distance if risk_distance > 0 else 0
 
+    # Multi-tier TP: compute tier trigger prices from config (entry + r*risk_distance).
+    # Falls back to a single-tier proxy if config is missing the new structure.
+    cfg = load_risk_config()
+    tp_cfg = cfg.get("market_trading", {}).get("take_profit", {})
+    tier_defs = tp_cfg.get("tp_tiers", [])
+    tp_tiers = compute_tp_tiers(entry_price, stop_loss_price, direction, tier_defs)
+
     order = {
         "asset": asset,
         "direction": direction,
@@ -71,6 +101,7 @@ def build_order(
         "entry_price": entry_price,
         "stop_loss": stop_loss_price,
         "take_profit": take_profit_price,
+        "tp_tiers": tp_tiers,
         "position_size": round(position_size, 6),
         "notional_usd": round(notional, 2),
         "margin_required_usd": round(margin_required, 2),

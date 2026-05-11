@@ -105,19 +105,125 @@ def _public_exchange():
     return ex
 
 
-def get_public_price(symbol: str) -> Optional[float]:
-    """Fetch the current price for a symbol via public OHLCV (no auth).
+# Yahoo Finance ticker map for CFD-style symbols. CFD brokers don't provide
+# free unauthenticated price feeds, so for paper trading we proxy the
+# underlying instrument's price from Yahoo (free, no key, ~15s delayed).
+# When the live CFD broker (Capital.com etc.) is wired, the live adapter
+# replaces this for executions; this fetcher stays for paper price marks.
+_YAHOO_TICKER_MAP = {
+    "XAUUSD": "GC=F",      # Gold futures
+    "XAGUSD": "SI=F",      # Silver futures
+    "XPTUSD": "PL=F",      # Platinum futures
+    "USOIL":  "CL=F",      # WTI crude
+    "UKOIL":  "BZ=F",      # Brent crude
+    "BRENT":  "BZ=F",
+    "WTI":    "CL=F",
+    "NATGAS": "NG=F",
+    "COPPER": "HG=F",
+    "SPX500": "^GSPC",
+    "NAS100": "^NDX",
+    "US30":   "^DJI",
+    "GER40":  "^GDAXI",
+    "UK100":  "^FTSE",
+    "JPN225": "^N225",
+    "FRA40":  "^FCHI",
+    "AUS200": "^AXJO",
+}
 
-    Returns the last close price, or None on failure (caller decides whether
-    to skip the position this cycle).
+
+def _fetch_yahoo_price(yahoo_symbol: str) -> Optional[float]:
+    """Fetch latest price from Yahoo Finance's public chart endpoint.
+    Returns None on any failure — caller decides whether to skip the cycle."""
+    try:
+        import urllib.request
+        import urllib.parse
+        url = (
+            "https://query1.finance.yahoo.com/v8/finance/chart/"
+            f"{urllib.parse.quote(yahoo_symbol)}?interval=1m&range=1d"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json as _json
+            data = _json.loads(resp.read().decode("utf-8"))
+        result = data.get("chart", {}).get("result")
+        if not result:
+            return None
+        meta = result[0].get("meta", {})
+        px = meta.get("regularMarketPrice") or meta.get("previousClose")
+        return float(px) if px else None
+    except Exception as e:
+        print(f"[paper_engine] yahoo fetch failed for {yahoo_symbol}: {e}")
+        return None
+
+
+def get_public_ohlcv(symbol: str, timeframe: str = "1h", limit: int = 200) -> Optional[list]:
+    """Fetch OHLCV bars for a symbol via public feed.
+
+    Crypto routes through ccxt; CFD-style symbols route through Yahoo Finance
+    using the same ticker map as `get_public_price`. Returns the same shape as
+    ccxt's fetch_ohlcv: [[ts_ms, open, high, low, close, volume], ...] or None.
     """
+    sym_upper = symbol.upper() if symbol else ""
+    if sym_upper in _YAHOO_TICKER_MAP:
+        try:
+            import urllib.request, urllib.parse, json as _json
+            tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "1h", "1d": "1d"}
+            interval = tf_map.get(timeframe, "1h")
+            range_map = {"1m": "1d", "5m": "5d", "15m": "5d", "1h": "1mo", "1d": "1y"}
+            yrange = range_map.get(interval, "1mo")
+            url = (
+                "https://query1.finance.yahoo.com/v8/finance/chart/"
+                f"{urllib.parse.quote(_YAHOO_TICKER_MAP[sym_upper])}"
+                f"?interval={interval}&range={yrange}"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+            result = data.get("chart", {}).get("result")
+            if not result:
+                return None
+            r = result[0]
+            ts = r.get("timestamp") or []
+            q = (r.get("indicators", {}).get("quote") or [{}])[0]
+            opens, highs, lows, closes, vols = (q.get(k) or [] for k in ("open", "high", "low", "close", "volume"))
+            bars = []
+            for i, t in enumerate(ts):
+                if None in (opens[i] if i < len(opens) else None,
+                            highs[i] if i < len(highs) else None,
+                            lows[i]  if i < len(lows) else None,
+                            closes[i] if i < len(closes) else None):
+                    continue
+                bars.append([t * 1000, opens[i], highs[i], lows[i], closes[i], (vols[i] or 0) if i < len(vols) else 0])
+            return bars[-limit:] if bars else None
+        except Exception as e:
+            print(f"[paper_engine] yahoo ohlcv failed for {symbol}: {e}")
+            return None
     try:
         ex = _public_exchange()
-        # Use 1m latest candle close as the most recent price snapshot
+        return ex.fetch_ohlcv(symbol, timeframe, limit=limit)
+    except Exception as e:
+        print(f"[paper_engine] ohlcv fetch failed for {symbol}: {e}")
+        return None
+
+
+def get_public_price(symbol: str) -> Optional[float]:
+    """Fetch the current price for a symbol via public feed (no auth).
+
+    Routing:
+      - Crypto symbols ("BTC/USDT:USDT" etc.) → public ccxt exchange.
+      - CFD-style tickers (XAUUSD, SPX500, USOIL, ...) → Yahoo Finance.
+
+    Returns None on failure (caller skips the position this cycle).
+    """
+    sym_upper = symbol.upper() if symbol else ""
+    if sym_upper in _YAHOO_TICKER_MAP:
+        return _fetch_yahoo_price(_YAHOO_TICKER_MAP[sym_upper])
+    try:
+        ex = _public_exchange()
         candles = ex.fetch_ohlcv(symbol, "1m", limit=2)
         if not candles:
             return None
-        return float(candles[-1][4])  # close of latest candle
+        return float(candles[-1][4])
     except Exception as e:
         print(f"[paper_engine] price fetch failed for {symbol}: {e}")
         return None
@@ -143,11 +249,19 @@ def get_paper_balance() -> dict:
             total = initial
         else:
             total = float(raw)
-        # Compute locked margin from open paper trades
+        # Compute locked margin from open paper trades. Account for partial
+        # closes by subtracting the already-closed quantity from each open trade.
         rows = conn.execute(
-            """SELECT COALESCE(SUM(quantity * entry_price / leverage), 0)
-               FROM trades
-               WHERE status='open' AND broker LIKE 'paper%'"""
+            """SELECT COALESCE(SUM(
+                  (MAX(t.quantity - COALESCE(pc.closed_qty, 0), 0) * t.entry_price) / t.leverage
+               ), 0)
+               FROM trades t
+               LEFT JOIN (
+                   SELECT trade_id, SUM(quantity_closed) AS closed_qty
+                   FROM partial_closes
+                   GROUP BY trade_id
+               ) pc ON pc.trade_id = t.id
+               WHERE t.status='open' AND t.broker LIKE 'paper%'"""
         ).fetchone()
         locked = float(rows[0] or 0)
         return {"total": total, "free": max(0.0, total - locked), "locked": locked}

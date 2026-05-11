@@ -167,25 +167,54 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
             "trigger": sl,
         }
 
-        # Place take profit (conditional order)
-        tp_order = exchange.create_order(
-            symbol=asset,
-            type="market",
-            side=sl_side,
-            amount=size,
-            params={
-                "takeProfit": {
-                    "triggerPrice": tp,
-                    "type": "market",
+        # Place take-profit orders. If multi-tier config is present, place one
+        # conditional order per tier with quantity = size * close_pct/100.
+        # Otherwise fall back to a single TP at the legacy `tp` price.
+        tp_tiers = order.get("tp_tiers") or []
+        if tp_tiers:
+            tp_orders = []
+            for idx, tier in enumerate(tp_tiers, start=1):
+                tier_qty = size * (tier["close_pct"] / 100.0)
+                tier_price = tier["trigger_price"]
+                try:
+                    tp_order = exchange.create_order(
+                        symbol=asset,
+                        type="market",
+                        side=sl_side,
+                        amount=tier_qty,
+                        params={
+                            "takeProfit": {"triggerPrice": tier_price, "type": "market"},
+                            "reduceOnly": True,
+                            "triggerDirection": 1 if direction == "long" else 2,
+                        },
+                    )
+                    tp_orders.append({
+                        "tier": idx,
+                        "id": tp_order.get("id", ""),
+                        "trigger": tier_price,
+                        "qty": tier_qty,
+                        "close_pct": tier["close_pct"],
+                        "r": tier["r"],
+                    })
+                except Exception as e:
+                    result["errors"].append(f"TP{idx} placement failed: {e}")
+            result["orders"]["take_profit_tiers"] = tp_orders
+        else:
+            tp_order = exchange.create_order(
+                symbol=asset,
+                type="market",
+                side=sl_side,
+                amount=size,
+                params={
+                    "takeProfit": {"triggerPrice": tp, "type": "market"},
+                    "reduceOnly": True,
+                    "triggerDirection": 1 if direction == "long" else 2,
                 },
-                "reduceOnly": True,
-                "triggerDirection": 1 if direction == "long" else 2,
-            },
-        )
-        result["orders"]["take_profit"] = {
-            "id": tp_order.get("id", ""),
-            "trigger": tp,
-        }
+            )
+            result["orders"]["take_profit"] = {
+                "id": tp_order.get("id", ""),
+                "trigger": tp,
+            }
 
         result["status"] = "EXECUTED"
 
@@ -252,6 +281,7 @@ def _log_to_db(order: dict, result: dict):
             quantity=order["position_size"],
             leverage=order["leverage"],
             stop_loss=order["stop_loss"],
+            initial_sl=order["stop_loss"],
             take_profit=order["take_profit"],
             status=TradeStatus.OPEN if result["status"] in ("EXECUTED", "DRY_RUN") else TradeStatus.CANCELLED,
             strategy=order.get("strategy", ""),

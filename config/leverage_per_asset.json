@@ -1,0 +1,89 @@
+{
+  "_comment": "Per-asset leverage tiers. The risk engine looks up the symbol's tier and uses (default | high_conviction_70 | high_conviction_80) based on confluence score. Falls back to risk_params.json leverage_limits if a symbol isn't listed. The `enabled` flag gates whole asset classes — flip to true once the broker adapter is wired and paper-tested. Tiers are deliberately aggressive: a 250 EUR budget needs leverage to generate meaningful P&L, and the 2%-per-trade risk cap means leverage only affects margin (not loss), provided exchange-side SL fills (slippage on flash crashes is the real residual risk).",
+  "crypto_perp": {
+    "enabled": true,
+    "tiers": {
+      "low_vol_majors": {
+        "symbols": ["BTC/USDT:USDT", "ETH/USDT:USDT"],
+        "default": 7,
+        "high_conviction_70": 10,
+        "high_conviction_80": 15
+      },
+      "large_cap_alts": {
+        "symbols": [
+          "SOL/USDT:USDT", "LINK/USDT:USDT", "AVAX/USDT:USDT",
+          "ADA/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT"
+        ],
+        "default": 5,
+        "high_conviction_70": 7,
+        "high_conviction_80": 10
+      },
+      "high_vol_alts": {
+        "symbols": [
+          "ARB/USDT:USDT", "OP/USDT:USDT", "SUI/USDT:USDT",
+          "WIF/USDT:USDT", "PEPE/USDT:USDT", "BONK/USDT:USDT"
+        ],
+        "default": 3,
+        "high_conviction_70": 5,
+        "high_conviction_80": 7
+      }
+    }
+  },
+  "cfd_commodity": {
+    "enabled": true,
+    "tiers": {
+      "metals_oil": {
+        "symbols": ["XAUUSD", "XAGUSD", "USOIL", "UKOIL", "BRENT", "WTI"],
+        "default": 7,
+        "high_conviction_70": 10,
+        "high_conviction_80": 15
+      }
+    }
+  },
+  "cfd_index": {
+    "enabled": true,
+    "tiers": {
+      "major_indices": {
+        "symbols": ["SPX500", "NAS100", "US30", "GER40", "UK100", "JPN225"],
+        "default": 7,
+        "high_conviction_70": 10,
+        "high_conviction_80": 15
+      }
+    }
+  },
+  "stock_equity": {
+    "enabled": false,
+    "_note": "ESMA caps retail stock CFD leverage at 5x. Enable once stock broker adapter is wired.",
+    "tiers": {
+      "us_large_cap": {
+        "symbols": ["SPY", "QQQ", "NVDA", "AAPL", "MSFT", "TSLA", "GOOGL", "AMZN"],
+        "default": 2,
+        "high_conviction_70": 3,
+        "high_conviction_80": 5
+      }
+    }
+  },
+  "forex_spot": {
+    "enabled": false,
+    "_note": "ESMA caps retail forex majors at 30x. Enable once FX broker adapter is wired.",
+    "tiers": {
+      "majors": {
+        "symbols": ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD"],
+        "default": 15,
+        "high_conviction_70": 20,
+        "high_conviction_80": 30
+      }
+    }
+  },
+  "bond_etf": {
+    "enabled": false,
+    "tiers": {
+      "treasuries": {
+        "symbols": ["TLT", "IEF", "AGG", "BND", "SHY"],
+        "default": 2,
+        "high_conviction_70": 2,
+        "high_conviction_80": 3
+      }
+    }
+  }
+}

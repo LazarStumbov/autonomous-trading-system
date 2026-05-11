@@ -74,8 +74,8 @@ ASSET_CLASS_ENABLED: dict[AssetClass, bool] = {
     AssetClass.BOND_ETF: False,
     AssetClass.BOND_FUTURE: False,
     AssetClass.FOREX_SPOT: False,
-    AssetClass.CFD_INDEX: False,
-    AssetClass.CFD_COMMODITY: False,
+    AssetClass.CFD_INDEX: True,           # Paper-only: priced via Yahoo Finance public feed
+    AssetClass.CFD_COMMODITY: True,       # Paper-only: priced via Yahoo Finance public feed
     AssetClass.CFD_FOREX: False,
     AssetClass.POLYMARKET_BINARY: False,  # Stage 3
     AssetClass.UNKNOWN: False,

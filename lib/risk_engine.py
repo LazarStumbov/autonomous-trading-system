@@ -4,6 +4,8 @@ Every trade MUST pass through check_trade() before execution.
 The risk engine has absolute veto power.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from lib.db import get_connection, get_open_trades, get_system_state, get_daily_stats
@@ -11,10 +13,69 @@ from lib.constants import RiskVerdict, MAX_RISK_PER_TRADE_PCT, MAX_DAILY_DRAWDOW
 
 
 def load_risk_config() -> dict:
-    """Load risk parameters from config file."""
+    """Load risk parameters from config file.
+
+    When PAPER_MODE=true, the `paper_mode_overrides` section is merged into the
+    relevant fields. This keeps live trading strict while letting paper mode
+    generate a richer trade sample for review.
+    """
     config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "risk_params.json")
     with open(config_path) as f:
-        return json.load(f)
+        config = json.load(f)
+
+    if os.environ.get("PAPER_MODE", "").lower() == "true":
+        ov = config.get("paper_mode_overrides", {})
+        if "min_risk_reward_ratio" in ov:
+            config["market_trading"]["min_risk_reward_ratio"] = ov["min_risk_reward_ratio"]
+        if "max_portfolio_exposure_pct" in ov:
+            config["market_trading"]["max_portfolio_exposure_pct"] = ov["max_portfolio_exposure_pct"]
+        if "max_daily_drawdown_pct" in ov:
+            config["market_trading"]["circuit_breakers"]["daily_loss_halt_pct"] = ov["max_daily_drawdown_pct"]
+        if "initial_market_usd" in ov:
+            config["capital"]["initial_market_usd"] = ov["initial_market_usd"]
+
+    return config
+
+
+_LEVERAGE_PER_ASSET_CACHE = None
+
+
+def load_leverage_per_asset() -> dict:
+    """Load per-asset leverage tiers. Cached for the process lifetime since
+    it's read on every trade build."""
+    global _LEVERAGE_PER_ASSET_CACHE
+    if _LEVERAGE_PER_ASSET_CACHE is not None:
+        return _LEVERAGE_PER_ASSET_CACHE
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "leverage_per_asset.json")
+    try:
+        with open(path) as f:
+            _LEVERAGE_PER_ASSET_CACHE = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        _LEVERAGE_PER_ASSET_CACHE = {}
+    return _LEVERAGE_PER_ASSET_CACHE
+
+
+def lookup_asset_leverage_cap(asset_symbol: str, confluence_score: float) -> int | None:
+    """Return the per-asset leverage cap based on confluence score, or None
+    if the symbol isn't listed (caller falls back to global limits)."""
+    cfg = load_leverage_per_asset()
+    if not cfg or not asset_symbol:
+        return None
+    sym = asset_symbol.upper()
+    for class_name, class_cfg in cfg.items():
+        if class_name.startswith("_"):
+            continue
+        if not class_cfg.get("enabled"):
+            continue
+        for tier_name, tier in (class_cfg.get("tiers") or {}).items():
+            symbols = [s.upper() for s in tier.get("symbols", [])]
+            if sym in symbols:
+                if confluence_score >= 80:
+                    return int(tier.get("high_conviction_80", tier.get("default", 3)))
+                if confluence_score >= 70:
+                    return int(tier.get("high_conviction_70", tier.get("default", 3)))
+                return int(tier.get("default", 3))
+    return None
 
 
 def calculate_position_size(
@@ -54,18 +115,37 @@ def calculate_position_size(
     }
 
 
-def check_leverage(requested_leverage: float, confluence_score: float = 0) -> dict:
+def check_leverage(
+    requested_leverage: float,
+    confluence_score: float = 0,
+    asset_symbol: str | None = None,
+) -> dict:
     """Validate leverage against limits.
 
+    The cap is resolved in this order:
+      1. Per-asset tier from `config/leverage_per_asset.json` (if the symbol
+         is listed under an enabled class).
+      2. Global tier from `config/risk_params.json` (`default` /
+         `high_conviction_max` based on confluence).
+    The `absolute_max` global ceiling is always enforced as an upper bound.
+
     Returns:
-        Dict with approved_leverage, verdict, reason
+        Dict with approved_leverage, verdict, reason, source.
     """
     config = load_risk_config()
     limits = config["market_trading"]["leverage_limits"]
 
-    max_allowed = limits["default"]
-    if confluence_score >= limits["high_conviction_min_confluence"]:
-        max_allowed = limits["high_conviction_max"]
+    per_asset_cap = lookup_asset_leverage_cap(asset_symbol or "", confluence_score)
+
+    if per_asset_cap is not None:
+        max_allowed = per_asset_cap
+        source = f"per_asset[{asset_symbol}]"
+    else:
+        if confluence_score >= limits["high_conviction_min_confluence"]:
+            max_allowed = limits["high_conviction_max"]
+        else:
+            max_allowed = limits["default"]
+        source = "global"
 
     approved = min(requested_leverage, max_allowed, limits["absolute_max"])
 
@@ -73,8 +153,9 @@ def check_leverage(requested_leverage: float, confluence_score: float = 0) -> di
         "requested": requested_leverage,
         "approved": approved,
         "max_allowed": max_allowed,
+        "source": source,
         "verdict": RiskVerdict.PASS if requested_leverage <= max_allowed else RiskVerdict.FAIL,
-        "reason": f"Leverage {approved}x approved (max {max_allowed}x for confluence {confluence_score})",
+        "reason": f"Leverage {approved}x approved (max {max_allowed}x via {source} for confluence {confluence_score})",
     }
 
 
@@ -249,8 +330,8 @@ def check_trade(
     # 4. Position sizing
     checks["position_size"] = calculate_position_size(capital, entry_price, stop_loss_price)
 
-    # 5. Leverage
-    checks["leverage"] = check_leverage(requested_leverage, confluence_score)
+    # 5. Leverage (per-asset cap when symbol matches config/leverage_per_asset.json)
+    checks["leverage"] = check_leverage(requested_leverage, confluence_score, asset_symbol=asset)
     if checks["leverage"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["leverage"]["reason"])
 
