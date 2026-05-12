@@ -54,7 +54,28 @@ def fetch_all_market_data(symbols: list[str] = None, timeframes: list[str] = Non
     config = load_watchlist()
 
     if symbols is None:
-        symbols = config["watchlist"]["crypto_perpetuals"]
+        # Start with crypto perps, then append every enabled non-crypto lane so
+        # the screener sees commodities, indices, stocks, bonds, and forex.
+        # Routing inside get_ticker / fetch_ohlcv detects Yahoo-mapped symbols
+        # and pulls them from Yahoo Finance — we just have to put them on the
+        # list. Live trading still needs per-class broker adapters; in paper
+        # mode every non-crypto class is Yahoo-priced.
+        try:
+            from lib.constants import AssetClass, ASSET_CLASS_ENABLED
+            enabled = {
+                "cfd_commodity": ASSET_CLASS_ENABLED.get(AssetClass.CFD_COMMODITY, False),
+                "cfd_index":     ASSET_CLASS_ENABLED.get(AssetClass.CFD_INDEX, False),
+                "stock_equity":  ASSET_CLASS_ENABLED.get(AssetClass.STOCK_EQUITY, False),
+                "bond_etf":      ASSET_CLASS_ENABLED.get(AssetClass.BOND_ETF, False),
+                "forex_spot":    ASSET_CLASS_ENABLED.get(AssetClass.FOREX_SPOT, False),
+            }
+        except Exception:
+            enabled = {}
+        symbols = list(config["watchlist"]["crypto_perpetuals"])
+        wl = config["watchlist"]
+        for lane, on in enabled.items():
+            if on:
+                symbols.extend(wl.get(lane, []))
     if timeframes is None:
         tf_config = config["timeframes"]
         timeframes = [tf_config["trend"], tf_config["confirmation"], tf_config["primary"], tf_config["entry"]]

@@ -111,6 +111,7 @@ def _public_exchange():
 # When the live CFD broker (Capital.com etc.) is wired, the live adapter
 # replaces this for executions; this fetcher stays for paper price marks.
 _YAHOO_TICKER_MAP = {
+    # Commodities (CFD-style symbols → futures contracts)
     "XAUUSD": "GC=F",      # Gold futures
     "XAGUSD": "SI=F",      # Silver futures
     "XPTUSD": "PL=F",      # Platinum futures
@@ -120,6 +121,7 @@ _YAHOO_TICKER_MAP = {
     "WTI":    "CL=F",
     "NATGAS": "NG=F",
     "COPPER": "HG=F",
+    # Equity indices (CFD-style symbols → cash index)
     "SPX500": "^GSPC",
     "NAS100": "^NDX",
     "US30":   "^DJI",
@@ -128,6 +130,17 @@ _YAHOO_TICKER_MAP = {
     "JPN225": "^N225",
     "FRA40":  "^FCHI",
     "AUS200": "^AXJO",
+    # Stock equities — Yahoo uses the bare ticker
+    "SPY": "SPY", "QQQ": "QQQ", "DIA": "DIA", "IWM": "IWM",
+    "NVDA": "NVDA", "AAPL": "AAPL", "MSFT": "MSFT", "TSLA": "TSLA",
+    "GOOGL": "GOOGL", "AMZN": "AMZN", "META": "META",
+    # Bond ETFs
+    "TLT": "TLT", "IEF": "IEF", "SHY": "SHY", "AGG": "AGG",
+    "BND": "BND", "LQD": "LQD", "HYG": "HYG",
+    # Forex spot — Yahoo uses "<pair>=X"
+    "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X",
+    "AUDUSD": "AUDUSD=X", "USDCAD": "USDCAD=X", "USDCHF": "USDCHF=X",
+    "NZDUSD": "NZDUSD=X", "EURGBP": "EURGBP=X", "EURJPY": "EURJPY=X",
 }
 
 

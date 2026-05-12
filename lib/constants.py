@@ -70,10 +70,10 @@ class AssetClass(str, Enum):
 ASSET_CLASS_ENABLED: dict[AssetClass, bool] = {
     AssetClass.CRYPTO_PERP: True,
     AssetClass.CRYPTO_SPOT: True,
-    AssetClass.STOCK_EQUITY: False,
-    AssetClass.BOND_ETF: False,
+    AssetClass.STOCK_EQUITY: True,        # Paper-only: priced via Yahoo (delayed ~15s; closed outside RTH)
+    AssetClass.BOND_ETF: True,            # Paper-only: priced via Yahoo (delayed ~15s; closed outside RTH)
     AssetClass.BOND_FUTURE: False,
-    AssetClass.FOREX_SPOT: False,
+    AssetClass.FOREX_SPOT: True,          # Paper-only: priced via Yahoo (24/5 except weekends)
     AssetClass.CFD_INDEX: True,           # Paper-only: priced via Yahoo Finance public feed
     AssetClass.CFD_COMMODITY: True,       # Paper-only: priced via Yahoo Finance public feed
     AssetClass.CFD_FOREX: False,
