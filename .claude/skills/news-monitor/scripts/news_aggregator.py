@@ -46,6 +46,51 @@ def _marketaux(api_key: str) -> list[dict]:
         return []
 
 
+def _coindesk_rss() -> list[dict]:
+    """Free RSS fallback. No key required. Runs in paper mode so the news
+    pillar produces a non-empty news.json even with no MarketAux/Finnhub keys.
+
+    CoinDesk RSS has been the most reliable free crypto feed for ~10 years;
+    if it ever changes shape, fall back silently rather than crashing the
+    cron job.
+    """
+    if requests is None:
+        return []
+    url = "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    try:
+        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0 trading-bot"})
+        r.raise_for_status()
+        # Minimal RSS parser — avoids adding feedparser as a hard dep.
+        import re
+        text = r.text
+        items = []
+        for m in re.finditer(r"<item>(.*?)</item>", text, flags=re.DOTALL):
+            block = m.group(1)
+            title = (re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, flags=re.DOTALL) or [None, ""])[1].strip()
+            link  = (re.search(r"<link>(.*?)</link>", block, flags=re.DOTALL) or [None, ""])[1].strip()
+            desc  = (re.search(r"<description>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</description>", block, flags=re.DOTALL) or [None, ""])[1].strip()
+            pub   = (re.search(r"<pubDate>(.*?)</pubDate>", block, flags=re.DOTALL) or [None, ""])[1].strip()
+            try:
+                from email.utils import parsedate_to_datetime
+                pub_iso = parsedate_to_datetime(pub).astimezone(timezone.utc).isoformat() if pub else None
+            except Exception:
+                pub_iso = None
+            if title:
+                items.append({
+                    "source": "coindesk_rss",
+                    "title": title,
+                    "url": link,
+                    "published_at": pub_iso,
+                    "summary": re.sub(r"<[^>]+>", "", desc)[:500],
+                    "entities": [],
+                    "categories": ["economic"],  # baseline category so urgency picks up
+                })
+        return items[:25]
+    except Exception as e:
+        print(f"[news] coindesk_rss failed: {e}")
+        return []
+
+
 def _finnhub(api_key: str) -> list[dict]:
     if not api_key or requests is None:
         return []
@@ -75,6 +120,9 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     items = _marketaux(os.getenv("MARKETAUX_API_KEY", "")) + _finnhub(os.getenv("FINNHUB_API_KEY", ""))
+    # Free no-key fallback so news_signals.json is never empty in paper mode.
+    # Always merged (additive, not exclusive) — paid sources still take priority.
+    items += _coindesk_rss()
     # Dedupe by title
     seen = set()
     deduped = []

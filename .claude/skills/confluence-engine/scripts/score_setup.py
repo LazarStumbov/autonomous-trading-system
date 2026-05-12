@@ -41,8 +41,14 @@ def score_confluence(confluence: dict, weights: dict = None) -> dict:
     unique_types = confluence["unique_signal_types"]
     signals = confluence["signals"]
 
-    # Base score from number of independent signal types
-    base_score = 40 + (unique_types * 10)
+    # Base score from number of independent signal types.
+    # Diversity multiplier rewards setups corroborated by orthogonal sources:
+    # 1 type → 50, 2 → 65, 3 → 78, 4 → 88, 5+ → 95. Was a flat +10 per type;
+    # the new curve makes the gap between 1-type (TA only) and 3+ (TA + news
+    # + trader + volume) decisive, which is the diagnostic that distinguishes
+    # genuine confluence from a single strategy lighting up.
+    diversity_bonus_curve = {1: 10, 2: 25, 3: 38, 4: 48, 5: 55}
+    base_score = 40 + diversity_bonus_curve.get(min(5, unique_types), 55)
 
     # Weighted score from individual signals
     weighted_sum = 0

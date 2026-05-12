@@ -238,7 +238,19 @@ def main() -> int:
         return 0
 
     cfg = load_kelly_config()
-    pm_params = cfg.get("polymarket", {})
+    pm_params = dict(cfg.get("polymarket", {}))
+    # Paper-mode overrides: looser limits so the funnel produces enough bets
+    # for the trade journal during paper trading. Live values stay strict.
+    if os.environ.get("PAPER_MODE", "").lower() == "true":
+        pm_paper = (cfg.get("paper_mode_overrides", {}) or {}).get("polymarket", {}) or {}
+        if "max_correlated_bets" in pm_paper:
+            pm_params["max_correlated_bets"] = pm_paper["max_correlated_bets"]
+        if "diversification_min_categories" in pm_paper:
+            pm_params.setdefault("diversification", {})
+            pm_params["diversification"] = dict(pm_params.get("diversification") or {})
+            pm_params["diversification"]["min_categories"] = pm_paper["diversification_min_categories"]
+        if "min_edge_pct" in pm_paper:
+            pm_params["min_edge_pct"] = pm_paper["min_edge_pct"]
     bankroll = _bankroll_usd()
     exposure = _open_pm_exposure()
 

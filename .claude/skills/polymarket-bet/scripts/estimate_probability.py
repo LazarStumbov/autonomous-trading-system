@@ -119,6 +119,40 @@ def _shrink_to_market(p: float, low: float, high: float, market_price: float) ->
     return p
 
 
+def _paper_heuristic_estimate(cand: dict, market_price: float) -> dict | None:
+    """Paper-mode-only fallback when Perplexity is unavailable.
+
+    Without an LLM call we cannot do real research, but the user wants more
+    paper bets so the journal + position monitor have data to analyse. This
+    builds a small heuristic edge from the existing confluence score and
+    smart-money side bias — never enough to drive a live trade, but enough
+    to make the funnel produce bets in paper mode.
+
+    Returns None if the candidate doesn't merit any synthetic estimate
+    (low confluence, missing direction). Edge is capped at 6% to keep
+    paper P&L plausible.
+    """
+    if os.environ.get("PAPER_MODE", "").lower() != "true":
+        return None
+    conf = float(cand.get("confluence_score") or 0)
+    if conf < 20:  # below this, no edge worth simulating even on paper
+        return None
+    side = (cand.get("smart_money_side") or "yes").lower()
+    # Calibrated to observed paper-mode score distribution: most candidates
+    # without smart-money signals top out around 30. (conf - 20) / 500 gives
+    # conf=30 → 2% edge, conf=45 → 5%, conf=70+ → 6% cap.
+    raw_edge = min(0.06, max(0.0, (conf - 20) / 500.0))
+    direction_signed = +raw_edge if side == "yes" else -raw_edge
+    p = max(0.02, min(0.98, market_price + direction_signed))
+    return {
+        "p": p,
+        "low": max(0.0, p - 0.08),
+        "high": min(1.0, p + 0.08),
+        "base_rate": market_price,
+        "key_factors": [f"paper heuristic from confluence={conf:.0f}, smart-money={side}"],
+    }
+
+
 def _build_prompt(candidate: dict) -> str:
     q = candidate.get("market_question") or "?"
     yes_price = candidate.get("yes_price")
@@ -200,17 +234,22 @@ def main() -> int:
         prompt = _build_prompt(cand)
         result = perplexity.ask_safe(prompt, system=SYSTEM_PROMPT, max_tokens=400, temperature=0.1)
         llm_calls += 1
+        parsed = None
         if not result:
-            estimates.append({
-                "market_id": mid,
-                "market_question": cand["market_question"],
-                "confluence_score": cand["confluence_score"],
-                "action": "DEFER",
-                "reason": "Perplexity unavailable",
-            })
-            continue
-
-        parsed = _parse_answer(result.get("answer", ""))
+            # Paper mode: synthesize a heuristic estimate so the funnel
+            # still produces paper bets when Perplexity is offline.
+            parsed = _paper_heuristic_estimate(cand, market_price)
+            if parsed is None:
+                estimates.append({
+                    "market_id": mid,
+                    "market_question": cand["market_question"],
+                    "confluence_score": cand["confluence_score"],
+                    "action": "DEFER",
+                    "reason": "Perplexity unavailable",
+                })
+                continue
+        if parsed is None:
+            parsed = _parse_answer(result.get("answer", ""))
         if not parsed or "p" not in parsed:
             estimates.append({
                 "market_id": mid,
@@ -250,7 +289,8 @@ def main() -> int:
             "yes_price": market_price,
             "edge": round(shrunk - market_price, 4),
             "key_factors": key_factors[:5] if isinstance(key_factors, list) else [],
-            "citations": result.get("citations", [])[:5],
+            "citations": (result or {}).get("citations", [])[:5],
+            "source": "perplexity" if result else "paper_heuristic",
             "confluence_score": cand["confluence_score"],
             "ts": datetime.now(timezone.utc).isoformat(),
             "ttl_hours": CACHE_TTL_HOURS,

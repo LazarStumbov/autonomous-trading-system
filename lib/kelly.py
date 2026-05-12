@@ -62,6 +62,13 @@ def kelly_for_polymarket(estimated_prob: float, market_odds: float, fraction: fl
 
     min_edge = config["polymarket"]["min_edge_pct"] / 100
     max_bet = config["polymarket"]["max_bet_pct_bankroll"] / 100
+    # Paper-mode override: loosen min_edge so the funnel still produces bets
+    # when the Perplexity-free heuristic only generates 2-4% edges. Live mode
+    # keeps the strict 5% bar.
+    if os.environ.get("PAPER_MODE", "").lower() == "true":
+        pm_paper = (config.get("paper_mode_overrides", {}) or {}).get("polymarket", {}) or {}
+        if "min_edge_pct" in pm_paper:
+            min_edge = float(pm_paper["min_edge_pct"]) / 100
 
     edge = estimated_prob - market_odds
 

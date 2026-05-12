@@ -23,7 +23,22 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 
 HIGH_PRIORITY_CATS = {"geopolitical", "regulatory", "economic"}
 URGENCY_KEYWORDS = {"breaking", "just in", "alert", "urgent", "emergency"}
-CRYPTO_SYMBOLS = {"BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "AVAX", "DOGE"}
+# Mirror the watchlist crypto perps so symbols like ARB/OP/SUI/WIF/LINK aren't
+# silently dropped by the urgency emitter.
+CRYPTO_SYMBOLS = {
+    "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "AVAX", "DOGE",
+    "LINK", "ARB", "OP", "SUI", "WIF", "MATIC",
+}
+
+
+def _paper_mode_min_urgency() -> int:
+    """Resolve the minimum urgency to emit a news signal.
+
+    Live mode keeps the strict u>=6 bar. Paper mode (PAPER_MODE=true) drops to
+    u>=4 so news signals actually merge into the confluence engine and the
+    multi-type bonus in score_setup can fire.
+    """
+    return 4 if os.environ.get("PAPER_MODE", "").lower() == "true" else 6
 
 
 def urgency_for(item: dict) -> int:
@@ -72,10 +87,11 @@ def main():
 
     signals: list[dict] = []
     max_urgency = 0
+    min_urgency = _paper_mode_min_urgency()
     for item in news.get("items", []):
         u = urgency_for(item)
         max_urgency = max(max_urgency, u)
-        if u >= 6:
+        if u >= min_urgency:
             # emit one signal per asset mention
             text = f"{item.get('title','')} {item.get('summary','')}".upper()
             for sym in CRYPTO_SYMBOLS:

@@ -197,6 +197,13 @@ def check_correlated_positions(asset: str, direction: str, db_path: str = None) 
     """
     config = load_risk_config()
     max_correlated = config["market_trading"]["max_correlated_positions"]
+    # Paper mode override: at €500 virtual capital the live 3-position cap
+    # blocks the screener output too aggressively. Honor a paper-only
+    # ceiling when PAPER_MODE=true.
+    if os.environ.get("PAPER_MODE", "").lower() == "true":
+        paper_cap = config.get("paper_mode_overrides", {}).get("max_correlated_positions")
+        if paper_cap is not None:
+            max_correlated = int(paper_cap)
 
     conn = get_connection(db_path) if db_path else get_connection()
     open_trades = get_open_trades(conn)

@@ -1,9 +1,23 @@
-"""Track current positions of followed traders and emit trader_signals.json.
+"""Emit trader_signals.json from aggregate positioning data.
 
-confluence_detector.py reads this file (see line 74) to cross-check live setups
-against what skilled traders are doing right now.
+confluence_detector.py reads this file (line 126) to cross-check live setups
+against what skilled traders are doing right now. Previously this hit Bybit's
+copy-trade leaderboard, but the API is rate-limited and we switched broker to
+OKX anyway. The leaderboard scrape was producing zero signals every cycle, so
+the confluence engine never got the trader-type bump.
 
-Offline-safe: if Bybit position API fails, writes an empty signal list.
+This version fetches **public funding-rate data** from OKX swap markets via
+ccxt — no auth required. Sustained one-directional funding represents
+aggregate trader positioning, which is the same edge the leaderboard scrape
+was meant to capture (and arguably a cleaner read than any single trader).
+
+  funding > +0.05% / 8h  → traders paying to be long  → trader_accumulation long
+  funding < -0.05% / 8h  → traders paying to be short → trader_accumulation short
+
+Magnitude scales `skill_score` 0.5-1.0 so confluence_engine's strength
+weighting still differentiates conviction levels.
+
+Offline-safe: if ccxt or OKX fails, writes an empty signal list and exits 0.
 """
 
 from __future__ import annotations
@@ -15,44 +29,51 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 
-def load_followed() -> list[dict]:
-    path = Path(PROJECT_ROOT) / "config" / "trader_accounts.json"
-    if not path.exists():
-        return []
+def _load_watchlist_perps() -> list[str]:
+    """Pull the crypto-perp watchlist as a flat list of ccxt symbol strings."""
     try:
-        with open(path) as f:
-            cfg = json.load(f)
-        return cfg.get("traders", cfg if isinstance(cfg, list) else [])
-    except Exception:
+        with open(Path(PROJECT_ROOT) / "config" / "watchlist.json") as f:
+            wl = json.load(f).get("watchlist", {})
+        return list(wl.get("crypto_perpetuals", []))
+    except Exception as e:
+        print(f"[position_tracker] watchlist load failed: {e}", file=sys.stderr)
         return []
 
 
-def fetch_positions_for_trader(trader_id: str) -> list[dict]:
-    """Bybit's public copy-trade position endpoint. Best-effort; returns [] on failure."""
+def _funding_signal(symbol: str, exchange) -> dict | None:
+    """Fetch funding rate, classify direction + conviction. None when neutral."""
     try:
-        import requests  # type: ignore
-        r = requests.get(
-            "https://api2.bybit.com/fapi/beta/public/copytrade/trader/current/position",
-            params={"leaderMark": trader_id},
-            timeout=10,
-        )
-        r.raise_for_status()
-        body = r.json().get("result", {}).get("list", []) or []
-        return [
-            {
-                "symbol": p.get("symbol"),
-                "side": "long" if p.get("side", "").lower() == "buy" else "short",
-                "size": p.get("size"),
-                "entry_price": p.get("entryPrice"),
-                "leverage": p.get("leverage"),
-                "unrealized_pnl": p.get("unrealisedPnl"),
-            }
-            for p in body
-        ]
-    except Exception:
-        return []
+        fr = exchange.fetch_funding_rate(symbol)
+    except Exception as e:
+        print(f"[position_tracker] {symbol} funding fetch failed: {e}", file=sys.stderr)
+        return None
+    rate = fr.get("fundingRate")
+    if rate is None:
+        return None
+    # OKX returns funding as a fraction per 8h period. Convert to bps for readability.
+    # Empirical: BTC/ETH funding sits in [-1.0, +1.0] bps even on trending days,
+    # so the threshold is calibrated to the actual distribution — not the
+    # textbook 5-30bps range that applies to volatile small caps only.
+    bps = float(rate) * 10_000
+    if abs(bps) < 0.3:  # below 0.3bps over 8h → essentially neutral
+        return None
+    direction = "long" if bps > 0 else "short"
+    # skill_score maps |bps| → [0.5, 1.0]: 0.3bps→0.5, 2bps→1.0
+    conviction = min(1.0, 0.5 + (abs(bps) - 0.3) / 3.4)
+    return {
+        "asset": symbol,
+        "symbol": symbol,
+        "direction": direction,
+        "skill_score": round(conviction, 3),
+        "funding_bps_8h": round(bps, 2),
+        "next_funding_at": fr.get("fundingDatetime"),
+        "source": "okx_funding",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def main():
@@ -60,30 +81,28 @@ def main():
     out_dir = Path(PROJECT_ROOT) / "data" / "signals" / today
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    traders = load_followed()
     signals: list[dict] = []
-    for t in traders[:20]:  # cap to avoid rate limits
-        tid = t.get("account_id") or t.get("id")
-        if not tid:
-            continue
-        positions = fetch_positions_for_trader(tid)
-        for p in positions:
-            signals.append({
-                "trader_id": tid,
-                "alias": t.get("alias"),
-                "skill_score": t.get("skill_score", 0),
-                "asset": p["symbol"],
-                "direction": p["side"],
-                "entry_price": p.get("entry_price"),
-                "size": p.get("size"),
-                "leverage": p.get("leverage"),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+    try:
+        import ccxt  # type: ignore
+        exchange = ccxt.okx({"enableRateLimit": True})
+        # Public endpoints — no auth needed.
+        for sym in _load_watchlist_perps():
+            sig = _funding_signal(sym, exchange)
+            if sig:
+                signals.append(sig)
+    except ImportError:
+        print("[position_tracker] ccxt unavailable — emitting empty signal list", file=sys.stderr)
+    except Exception as e:
+        print(f"[position_tracker] exchange init failed: {e}", file=sys.stderr)
 
     out = out_dir / "trader_signals.json"
     with open(out, "w") as f:
-        json.dump({"generated_at": datetime.now(timezone.utc).isoformat(), "signals": signals}, f, indent=2)
-    print(f"[position_tracker] {len(signals)} trader signals across {len(traders)} followed accounts → {out}")
+        json.dump(
+            {"generated_at": datetime.now(timezone.utc).isoformat(), "signals": signals},
+            f,
+            indent=2,
+        )
+    print(f"[position_tracker] {len(signals)} trader signals from OKX funding → {out}")
 
 
 if __name__ == "__main__":

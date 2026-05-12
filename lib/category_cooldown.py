@@ -43,6 +43,32 @@ DEFAULT_LOSS_THRESHOLD = int(os.environ.get("CATEGORY_LOSS_THRESHOLD", "2"))
 DEFAULT_COOLDOWN_HOURS = float(os.environ.get("CATEGORY_COOLDOWN_HOURS", "4"))
 
 
+def _paper_mode_overrides() -> dict:
+    """Read paper-mode cooldown overrides from risk_params.json.
+
+    Live mode returns {} so callers fall back to the live-tier defaults
+    (4h / 2 losses). Paper mode reads the JSON file each call — cheap (few KB)
+    and avoids stale-cache surprises when the user tunes parameters mid-run.
+    """
+    if os.environ.get("PAPER_MODE", "").lower() != "true":
+        return {}
+    try:
+        cfg_path = os.path.join(PROJECT_ROOT, "config", "risk_params.json")
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        return cfg.get("paper_mode_overrides", {}) or {}
+    except Exception:
+        return {}
+
+
+def _effective_loss_threshold() -> int:
+    return int(_paper_mode_overrides().get("category_loss_threshold", DEFAULT_LOSS_THRESHOLD))
+
+
+def _effective_cooldown_hours() -> float:
+    return float(_paper_mode_overrides().get("category_cooldown_hours", DEFAULT_COOLDOWN_HOURS))
+
+
 # ── Heuristic: map a Bybit-style symbol to a coarse asset category. ─────────
 # Will be replaced by lib/brokers/<adapter>.asset_class once Stage 4 lands.
 def asset_to_category(symbol: str) -> str:
@@ -120,8 +146,8 @@ def register_trade_close(
     category: str,
     won: bool,
     *,
-    loss_threshold: int = DEFAULT_LOSS_THRESHOLD,
-    cooldown_hours: float = DEFAULT_COOLDOWN_HOURS,
+    loss_threshold: int | None = None,
+    cooldown_hours: float | None = None,
 ) -> dict:
     """Update consecutive-loss counter for a category.
 
@@ -131,6 +157,10 @@ def register_trade_close(
 
     Returns the entry dict for this category after the update.
     """
+    if loss_threshold is None:
+        loss_threshold = _effective_loss_threshold()
+    if cooldown_hours is None:
+        cooldown_hours = _effective_cooldown_hours()
     state = _load_state(conn)
     entry = state.get(category) or {
         "consecutive_losses": 0,

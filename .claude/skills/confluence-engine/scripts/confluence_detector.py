@@ -140,14 +140,26 @@ def load_signals_from_files(signals_dir: str = None) -> list[dict]:
 
 
 def _classify_signal_type(signal_name: str) -> str:
-    """Map specific signal names to broad SignalType categories."""
+    """Map specific signal names to broad SignalType categories.
+
+    Order matters: check volume/sentiment/cross-asset BEFORE the generic
+    technical bucket so a strategy named e.g. "volume_breakout_v2" doesn't
+    silently fall into TECHNICAL_BREAKOUT (which kept confluences at
+    unique_types=1 for every paper trade in the May 7-11 baseline).
+    """
     name = signal_name.lower()
-    if any(k in name for k in ["breakout", "ema", "macd", "rsi", "bb"]):
-        return SignalType.TECHNICAL_BREAKOUT
-    if "volume" in name:
+    if "volume" in name or "vol_spike" in name or "vwap" in name:
         return SignalType.VOLUME_ANOMALY
     if "sentiment" in name:
         return SignalType.SENTIMENT_SHIFT
+    if any(k in name for k in ["correlation", "cross_asset", "btc_dominance"]):
+        return SignalType.CROSS_ASSET_CORRELATION
+    if any(k in name for k in ["funding", "oi_", "open_interest", "accumulation"]):
+        return SignalType.TRADER_ACCUMULATION
+    if "news" in name or "catalyst" in name:
+        return SignalType.NEWS_CATALYST
+    if any(k in name for k in ["breakout", "ema", "macd", "rsi", "bb", "ichimoku", "donchian"]):
+        return SignalType.TECHNICAL_BREAKOUT
     return SignalType.TECHNICAL_BREAKOUT
 
 
