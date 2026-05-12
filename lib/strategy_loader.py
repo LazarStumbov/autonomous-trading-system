@@ -224,7 +224,7 @@ def load_all(include_disabled: bool = False, modes: Optional[set[str]] = None) -
         elif sid in force_enable and mode == MODE_DISABLED:
             mode = MODE_BACKTEST
 
-        if not include_disabled and mode == MODE_DISABLED:
+        if not include_disabled and mode in (MODE_DISABLED, "archived"):
             continue
         if modes is not None and mode not in modes:
             continue

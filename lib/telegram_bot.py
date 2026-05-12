@@ -228,17 +228,27 @@ def _build_pnl_message() -> str:
 def _build_help_message() -> str:
     return (
         "🤖 <b>Trading Bot Commands</b>\n\n"
-        "/status  —  Open positions snapshot (P&L, SL, TP)\n"
-        "/pnl     —  Today's realized P&L summary\n"
-        "/help    —  This message"
+        "/status     —  Open positions snapshot (P&L, SL, TP)\n"
+        "/pnl        —  Today's realized P&L summary\n"
+        "/readiness  —  Live-trading readiness checklist\n"
+        "/help       —  This message"
     )
+
+
+def _build_readiness_message() -> str:
+    try:
+        from lib.live_readiness import format_report
+        return f"<pre>{format_report()}</pre>"
+    except Exception as e:
+        return f"❌ Readiness check error: {e}"
 
 
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
-_STATUS_TRIGGERS = {"status", "status update", "/status"}
-_PNL_TRIGGERS    = {"pnl", "/pnl", "daily pnl"}
-_HELP_TRIGGERS   = {"help", "/help", "/start"}
+_STATUS_TRIGGERS    = {"status", "status update", "/status"}
+_PNL_TRIGGERS       = {"pnl", "/pnl", "daily pnl"}
+_HELP_TRIGGERS      = {"help", "/help", "/start"}
+_READINESS_TRIGGERS = {"readiness", "/readiness"}
 
 
 def handle_update(payload: dict) -> None:
@@ -254,6 +264,8 @@ def handle_update(payload: dict) -> None:
         reply = _build_status_message()
     elif text in _PNL_TRIGGERS:
         reply = _build_pnl_message()
+    elif text in _READINESS_TRIGGERS:
+        reply = _build_readiness_message()
     elif text in _HELP_TRIGGERS:
         reply = _build_help_message()
     else:

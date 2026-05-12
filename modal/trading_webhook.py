@@ -288,10 +288,13 @@ def daily_report():
     # the Claude UI (subscription) and feed Opus's verdict back via ingest.
     _run(f"{imp}/trade_review_packet.py", timeout=60)
 
+    # Resolve any PM bets whose markets settled overnight, credit paper balance.
+    pm = "/app/.claude/skills/polymarket-bet/scripts"
+    _run(f"{pm}/pm_resolver.py", timeout=120)
+
     # Late-stage Polymarket convergence sweep — concentrate on markets at
     # 90-95c resolving in 1-7 days. Reuses the standard PM pipeline with a
     # tighter pre-filter.
-    pm = "/app/.claude/skills/polymarket-bet/scripts"
     _run(f"{pm}/discover_markets.py", timeout=120)
     _run(f"{pm}/signal_engine.py", timeout=60)
     _run(f"{pm}/estimate_probability.py", timeout=300)
@@ -449,6 +452,26 @@ def manual_trade(data: dict):
         return {"status": "risk_rejected", "detail": r_risk["stderr"]}
     r_ex = _run("/app/.claude/skills/execute-trade/scripts/execution_engine.py", "--source=manual", "--input", str(manual_path), timeout=120)
     return {"status": "executed" if r_ex["ok"] else "exec_failed", "stdout": r_ex["stdout"][-500:]}
+
+
+@app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)
+@modal.fastapi_endpoint(method="GET")
+def readiness():
+    """Live-trading readiness checklist. Returns pass/fail for each gate."""
+    os.chdir("/app")
+    sys.path.insert(0, "/app")
+    try:
+        from lib.live_readiness import is_ready_for_live, format_report
+        passed, checks = is_ready_for_live()
+        return {
+            "ready": passed,
+            "status": "PASS" if passed else "FAIL",
+            "checks": checks,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        return {"ready": False, "status": "ERROR", "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.function(image=image, secrets=secrets, volumes=volumes, timeout=60)

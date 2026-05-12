@@ -306,6 +306,29 @@ def get_open_trades(conn: sqlite3.Connection, pillar: str = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_open_polymarket_trades(conn: sqlite3.Connection) -> list[dict]:
+    """Return open Polymarket trades joined with polymarket_bets for market_id."""
+    rows = conn.execute(
+        """
+        SELECT t.id        AS trade_id,
+               t.asset     AS market_question,
+               t.direction,
+               t.entry_price,
+               t.quantity,
+               t.strategy,
+               t.confluence_score,
+               pb.market_id,
+               pb.market_category
+        FROM   trades t
+        JOIN   polymarket_bets pb ON pb.trade_id = t.id
+        WHERE  t.status = 'open'
+          AND  t.pillar = 'polymarket'
+        ORDER  BY t.id
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def log_partial_close(
     conn: sqlite3.Connection,
     trade_id: int,

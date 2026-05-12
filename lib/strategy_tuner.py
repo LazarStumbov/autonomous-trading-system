@@ -300,13 +300,145 @@ def loop_circuit_breaker_check() -> tuple[bool, str]:
         conn.close()
 
 
+# ── Auto-promote / archive ───────────────────────────────────────────────────
+
+_AUDIT_LOG = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "memory", "STRATEGY-AUDIT.md")
+
+
+def _ensure_extended_modes(conn) -> None:
+    """Add 'archived' and 'backtest_validated' to the strategy_registry mode CHECK.
+
+    SQLite doesn't support ALTER COLUMN. We do a table-swap migration using a
+    separate raw connection so PRAGMA foreign_keys = OFF takes effect outside
+    any active transaction. Safe to call repeatedly (idempotent).
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='strategy_registry'"
+    ).fetchone()
+    if not row or "archived" in row[0]:
+        return
+
+    import sqlite3 as _sqlite3
+    db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+    raw = _sqlite3.connect(db_path, isolation_level=None)  # autocommit
+    try:
+        raw.execute("PRAGMA foreign_keys = OFF")
+        raw.execute("BEGIN")
+        raw.execute("DROP TABLE IF EXISTS strategy_registry_new")
+        raw.execute("""
+            CREATE TABLE strategy_registry_new (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                source TEXT,
+                source_url TEXT,
+                source_commit TEXT,
+                license TEXT,
+                version TEXT,
+                class_path TEXT,
+                timeframes_json TEXT,
+                asset_classes_json TEXT,
+                mode TEXT NOT NULL CHECK (mode IN (
+                    'backtest', 'paper', 'live', 'disabled', 'archived', 'backtest_validated'
+                )) DEFAULT 'backtest',
+                params_json TEXT,
+                safe_bounds_json TEXT,
+                backtest_snapshot_json TEXT,
+                paper_snapshot_json TEXT,
+                risk_notes TEXT,
+                mode_changed_at TEXT,
+                demotion_reason TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        raw.execute("INSERT INTO strategy_registry_new SELECT * FROM strategy_registry")
+        raw.execute("DROP TABLE strategy_registry")
+        raw.execute("ALTER TABLE strategy_registry_new RENAME TO strategy_registry")
+        raw.execute("CREATE INDEX IF NOT EXISTS idx_strategy_mode ON strategy_registry(mode)")
+        raw.execute("COMMIT")
+        raw.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        raw.execute("ROLLBACK")
+        raw.execute("PRAGMA foreign_keys = ON")
+        raise
+    finally:
+        raw.close()
+
+
+def _append_audit(entry: str) -> None:
+    os.makedirs(os.path.dirname(_AUDIT_LOG), exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    with open(_AUDIT_LOG, "a") as f:
+        f.write(f"- [{ts}] {entry}\n")
+
+
+def auto_promote_demote() -> list[dict]:
+    """Paper-mode auto-tuner: archive chronic losers, promote consistent winners.
+
+    Thresholds (paper-mode relaxed vs live):
+      Archive:  win_rate < 0.30  AND  total_trades >= 3  (live: >= 5)
+      Promote:  profit_factor >= 1.5  AND  total_trades >= 5  (live: >= 10)
+        paper → backtest_validated
+
+    Returns a list of action dicts for logging.
+    """
+    paper_mode = os.environ.get("PAPER_MODE", "").lower() == "true"
+    min_trades_archive = 2 if paper_mode else 5
+    min_trades_promote = 5 if paper_mode else 10
+
+    conn = get_connection()
+    _ensure_extended_modes(conn)
+    actions: list[dict] = []
+
+    try:
+        for s in list_strategies(conn):
+            sid = s["id"]
+            mode = s["mode"]
+            if mode in ("archived", "disabled", "live"):
+                continue
+            trades = _trades_for_strategy(conn, sid)
+            metrics = compute_metrics(trades)
+            n = metrics["total_trades"]
+
+            # Archive: chronic loser
+            if mode == "paper" and n >= min_trades_archive and metrics["win_rate"] < 0.30:
+                set_strategy_mode(conn, sid, "archived",
+                                  reason=f"win_rate={metrics['win_rate']:.2f} < 0.30 over {n} trades")
+                msg = (f"ARCHIVED {sid}: win_rate={metrics['win_rate']:.2f} "
+                       f"pnl=${metrics['total_pnl_usd']:.2f} n={n}")
+                _append_audit(msg)
+                actions.append({"strategy": sid, "action": "archived", "reason": msg})
+
+            # Promote: consistent paper performer
+            elif mode == "paper" and n >= min_trades_promote and metrics["profit_factor"] >= 1.5:
+                set_strategy_mode(conn, sid, "backtest_validated",
+                                  reason=f"pf={metrics['profit_factor']:.2f} over {n} trades")
+                msg = (f"PROMOTED {sid}: profit_factor={metrics['profit_factor']:.2f} "
+                       f"win_rate={metrics['win_rate']:.2f} n={n}")
+                _append_audit(msg)
+                actions.append({"strategy": sid, "action": "promoted", "reason": msg})
+
+    finally:
+        conn.close()
+
+    if actions:
+        print(f"[auto_promote_demote] {len(actions)} action(s):")
+        for a in actions:
+            print(f"  {a['action'].upper()}: {a['strategy']} — {a['reason']}")
+    else:
+        print("[auto_promote_demote] no changes (thresholds not met)")
+    return actions
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Apply promotion/demotion to strategies")
     parser.add_argument("--refresh", action="store_true", help="Recompute strategy_performance from trade journal")
     parser.add_argument("--transitions", action="store_true", help="Apply paper/live transitions")
     parser.add_argument("--circuit-breaker", action="store_true", help="Check auto-loop circuit breaker")
-    parser.add_argument("--all", action="store_true", help="Run all three")
+    parser.add_argument("--auto-tune", action="store_true", help="Archive losers, promote winners")
+    parser.add_argument("--all", action="store_true", help="Run all four")
     args = parser.parse_args()
 
     if args.all or args.refresh:
@@ -318,6 +450,9 @@ def main():
         print(f"[tuner] {len(transitions)} transitions:")
         for t in transitions:
             print(f"  {t['strategy']} {t['from']} → {t['to']}: {'; '.join(t['reasons'])}")
+
+    if args.all or args.auto_tune:
+        auto_promote_demote()
 
     if args.all or args.circuit_breaker:
         tripped, msg = loop_circuit_breaker_check()
