@@ -14,7 +14,6 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 
 from lib.constants import SignalType
-from lib.db import get_connection, init_db
 
 
 def _load_json_safe(path: str) -> dict | list | None:
@@ -136,7 +135,58 @@ def load_signals_from_files(signals_dir: str = None) -> list[dict]:
                 "detail": sig,
             })
 
+    # TradingView signals — alert_parser writes tv_setup.json; indicator_mapper
+    # enriches it with signal_type. Glob tv_*.json so Phase 2 pull-scanner output
+    # (tv_pull.json) lands in the same channel automatically.
+    import glob as _glob
+    for tv_path in sorted(_glob.glob(os.path.join(signals_dir, "tv_*.json"))):
+        tv_data = _load_json_safe(tv_path)
+        if tv_data is None:
+            continue
+        # Support three shapes: bare dict, list, or {signals: [...]} wrapper
+        if isinstance(tv_data, list):
+            setups = tv_data
+        elif isinstance(tv_data, dict) and "signals" in tv_data:
+            setups = tv_data["signals"]
+        else:
+            setups = [tv_data]
+        for s in setups:
+            raw = s.get("symbol") or s.get("asset") or ""
+            direction = s.get("direction") or s.get("bias")
+            if direction in ("bullish", "up"):
+                direction = "long"
+            elif direction in ("bearish", "down"):
+                direction = "short"
+            raw_type = s.get("signal_type") or s.get("type") or ""
+            sig_type = _classify_tv_signal_type(raw_type)
+            confidence = s.get("confidence") or s.get("strength") or 0.6
+            all_signals.append({
+                "symbol": _normalize_symbol(raw, norm),
+                "type": sig_type,
+                "direction": direction,
+                "strength": min(1.0, float(confidence) if float(confidence) <= 1.0 else float(confidence) / 100.0),
+                "source": "tradingview",
+                "detail": s,
+            })
+
     return all_signals
+
+
+def _classify_tv_signal_type(raw_type: str) -> SignalType:
+    """Map indicator_mapper output (or raw TV strings) to SignalType enum values."""
+    t = (raw_type or "").lower()
+    if t in ("mean_reversion", "mean reversion") or SignalType.MEAN_REVERSION.value == t:
+        return SignalType.MEAN_REVERSION
+    if t in ("structure", "structure_break") or SignalType.STRUCTURE_BREAK.value == t:
+        return SignalType.STRUCTURE_BREAK
+    if "volume" in t:
+        return SignalType.VOLUME_ANOMALY
+    if "sentiment" in t:
+        return SignalType.SENTIMENT_SHIFT
+    if any(k in t for k in ["momentum", "breakout", "trend_follow", "tv_generic"]):
+        return SignalType.TECHNICAL_BREAKOUT
+    # Fall through to the shared classifier for anything else
+    return _classify_signal_type(t)
 
 
 def _classify_signal_type(signal_name: str) -> str:

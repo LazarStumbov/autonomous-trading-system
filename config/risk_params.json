@@ -75,7 +75,7 @@
     "max_portfolio_exposure_pct": 250.0,
     "max_daily_drawdown_pct": 20.0,
     "initial_market_usd": 500,
-    "polymarket_min_confluence_score": 25,
+    "polymarket_min_confluence_score": 60,
     "category_cooldown_hours": 0.5,
     "category_loss_threshold": 3,
     "max_correlated_positions": 5,

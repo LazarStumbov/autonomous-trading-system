@@ -194,6 +194,7 @@ def _gate_one(est: dict, cand: dict, params: dict, bankroll: float, exposure: di
         fails.append(f"diversification: only {len(cats_after)} categories < min {min_cats}")
 
     verdict = "PASS" if not fails else "FAIL"
+    discovery_method = _infer_discovery_method(est, cand)
     return {
         "market_id": market_id,
         "market_question": est.get("market_question") or cand.get("market_question"),
@@ -209,7 +210,52 @@ def _gate_one(est: dict, cand: dict, params: dict, bankroll: float, exposure: di
         "confluence_score": cand.get("confluence_score"),
         "key_factors": est.get("key_factors", []),
         "citations": est.get("citations", []),
+        "clob_token_ids": cand.get("clob_token_ids"),
+        "discovery_method": discovery_method,
+        "discovery_evidence": _discovery_evidence(est, cand),
     }
+
+
+def _infer_discovery_method(est: dict, cand: dict) -> str:
+    """Choose the canonical discovery_method label for a passing estimate.
+
+    Priority:
+      1. Explicit tag from estimate_probability._paper_heuristic_estimate
+      2. Wallet cluster signal on candidate
+      3. Single sharp signal on candidate
+      4. Perplexity-researched estimate with citations
+      5. Fall back to heuristic_paper (and execute_bet routes to polymarket-heuristic strategy)
+    """
+    tagged = est.get("_discovery_method")
+    if tagged:
+        return tagged
+    signals = (cand.get("signals") or {})
+    if signals.get("cluster"):
+        wc = (signals.get("cluster") or {}).get("wallet_count_in_cluster", 0)
+        return "wallet_cluster_strong" if wc >= 3 else "wallet_cluster_weak"
+    if signals.get("smart_money"):
+        return "wallet_single"
+    if est.get("source") == "perplexity" and est.get("citations"):
+        return "news_driven_researched"
+    if signals.get("inconsistency"):
+        return "cross_market_arb"
+    return "heuristic_paper"
+
+
+def _discovery_evidence(est: dict, cand: dict) -> str:
+    """JSON-encoded evidence trail backing the discovery_method tag."""
+    signals = cand.get("signals") or {}
+    payload = {
+        "estimate_source": est.get("source"),
+        "wallets": list((signals.get("smart_money") or {}).get("wallets") or [])
+                   or list((signals.get("cluster") or {}).get("wallets") or []),
+        "cluster_size": (signals.get("cluster") or {}).get("wallet_count_in_cluster", 0),
+        "single_sharp_count": (signals.get("smart_money") or {}).get("single_sharp_count", 0),
+        "news_match": bool(signals.get("news")),
+        "citations": (est.get("citations") or [])[:3],
+        "key_factors": (est.get("key_factors") or [])[:3],
+    }
+    return json.dumps(payload, default=str)
 
 
 def main() -> int:

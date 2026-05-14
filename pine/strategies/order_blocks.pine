@@ -1,0 +1,80 @@
+// Order Block Detector
+// Identifies institutional order blocks: the last bearish candle before a
+// strong bullish move (demand OB) and last bullish candle before a strong
+// bearish move (supply OB). Draws boxes so `data_get_pine_boxes` can read
+// the high/low of each unmitigated zone.
+//
+// Bot reads via: tradingview_bridge.read_pine_levels(mcp_call, "OrderBlocks")
+
+//@version=5
+indicator("OrderBlocks", overlay=true, max_boxes_count=50)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+impulse_mult = input.float(1.5, "Impulse ATR multiple", minval=0.5, step=0.1)
+atr_len      = input.int(14,   "ATR length",            minval=2)
+lookback     = input.int(20,   "Max OB age (bars)",     minval=5)
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+atr = ta.atr(atr_len)
+body = math.abs(close - open)
+
+// Impulse bar: body > impulse_mult * ATR
+bullish_impulse = close > open and body >= impulse_mult * atr
+bearish_impulse = close < open and body >= impulse_mult * atr
+
+// Demand OB = bearish candle immediately before a bullish impulse
+demand_ob = bullish_impulse and close[1] < open[1]
+// Supply OB = bullish candle immediately before a bearish impulse
+supply_ob = bearish_impulse and close[1] > open[1]
+
+var box[] demand_boxes = array.new_box()
+var box[] supply_boxes = array.new_box()
+
+if demand_ob
+    b = box.new(bar_index[1], low[1], bar_index, high[1],
+                border_color=color.new(color.teal, 40),
+                bgcolor=color.new(color.teal, 80),
+                border_width=1)
+    array.push(demand_boxes, b)
+
+if supply_ob
+    b = box.new(bar_index[1], low[1], bar_index, high[1],
+                border_color=color.new(color.orange, 40),
+                bgcolor=color.new(color.orange, 80),
+                border_width=1)
+    array.push(supply_boxes, b)
+
+// Extend boxes; remove mitigated (price closed through the zone)
+if barstate.isconfirmed
+    cutoff = bar_index - lookback
+    for i = array.size(demand_boxes) - 1 to 0
+        b = array.get(demand_boxes, i)
+        mitigated = close < box.get_bottom(b) or box.get_left(b) < cutoff
+        if mitigated
+            box.delete(b)
+            array.remove(demand_boxes, i)
+        else
+            box.set_right(b, bar_index)
+
+    for i = array.size(supply_boxes) - 1 to 0
+        b = array.get(supply_boxes, i)
+        mitigated = close > box.get_top(b) or box.get_left(b) < cutoff
+        if mitigated
+            box.delete(b)
+            array.remove(supply_boxes, i)
+        else
+            box.set_right(b, bar_index)
+
+// ── Summary label ────────────────────────────────────────────────────────────
+var label summary_lbl = na
+if barstate.islast
+    label.delete(summary_lbl)
+    d = array.size(demand_boxes)
+    s = array.size(supply_boxes)
+    bias = d > s ? "Demand dominant" : s > d ? "Supply dominant" : "Balanced OBs"
+    summary_lbl := label.new(bar_index, low * 0.999,
+                             "OB " + bias + " (" + str.tostring(d) + "D/" + str.tostring(s) + "S)",
+                             style=label.style_label_up,
+                             color=color.new(color.navy, 60),
+                             textcolor=color.white,
+                             size=size.small)

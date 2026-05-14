@@ -258,6 +258,13 @@ def _apply(conn, proposal: dict, *, auto_apply: bool) -> dict:
         # For param_tweak we ALSO clone — we never in-place mutate a live strategy's
         # params. The variant races through backtest → paper → live on its own merit.
         new_strategy_id = _register_variant(conn, parent, proposal)
+        # Flag new variant for TV replay validation before paper promotion.
+        # The agent reads this flag during weekly_review and runs replay_validate()
+        # via the MCP on those strategies. Gated here so Modal cron doesn't block
+        # waiting for a local TV connection.
+        if new_strategy_id:
+            from lib.db import set_system_state as _sss
+            _sss(conn, f"needs_tv_replay:{new_strategy_id}", "true")
 
     hypo_id = log_hypothesis(
         conn,

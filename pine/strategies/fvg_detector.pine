@@ -1,0 +1,77 @@
+// Fair Value Gap (FVG) Detector
+// Detects bullish and bearish FVGs (3-candle imbalance zones) and draws them
+// as boxes so the MCP `data_get_pine_boxes` tool can read high/low levels
+// for machine consumption.
+//
+// Bot reads via: tradingview_bridge.read_pine_levels(mcp_call, "FVGDetector")
+// Output shape: [{high: float, low: float}, ...] (one entry per unfilled FVG)
+
+//@version=5
+indicator("FVGDetector", overlay=true, max_boxes_count=50)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+lookback   = input.int(50,  "Lookback bars",      minval=10, maxval=200)
+min_gap_pct = input.float(0.05, "Min gap % of price", minval=0.01, step=0.01)
+show_filled = input.bool(false, "Show filled FVGs")
+
+// ── FVG Detection ────────────────────────────────────────────────────────────
+// Bullish FVG: bar[2].high < bar[0].low  → gap between candle[-2] and current
+// Bearish FVG: bar[2].low  > bar[0].high → gap between candle[-2] and current
+bull_fvg = low > high[2] and (low - high[2]) / high[2] * 100 >= min_gap_pct
+bear_fvg = high < low[2]  and (low[2] - high) / low[2]  * 100 >= min_gap_pct
+
+var box[] bull_boxes = array.new_box()
+var box[] bear_boxes = array.new_box()
+
+// Draw new FVG boxes
+if bull_fvg
+    b = box.new(bar_index[2], low, bar_index, high[2],
+                border_color=color.new(color.green, 60),
+                bgcolor=color.new(color.green, 85),
+                border_width=1)
+    array.push(bull_boxes, b)
+
+if bear_fvg
+    b = box.new(bar_index[2], high, bar_index, low[2],
+                border_color=color.new(color.red, 60),
+                bgcolor=color.new(color.red, 85),
+                border_width=1)
+    array.push(bear_boxes, b)
+
+// Extend active boxes to current bar; remove filled ones
+if barstate.isconfirmed
+    for i = array.size(bull_boxes) - 1 to 0
+        b = array.get(bull_boxes, i)
+        top_price = box.get_top(b)
+        bot_price = box.get_bottom(b)
+        filled = close < bot_price
+        if filled and not show_filled
+            box.delete(b)
+            array.remove(bull_boxes, i)
+        else
+            box.set_right(b, bar_index)
+
+    for i = array.size(bear_boxes) - 1 to 0
+        b = array.get(bear_boxes, i)
+        top_price = box.get_top(b)
+        bot_price = box.get_bottom(b)
+        filled = close > top_price
+        if filled and not show_filled
+            box.delete(b)
+            array.remove(bear_boxes, i)
+        else
+            box.set_right(b, bar_index)
+
+// ── Summary label (read by data_get_pine_labels) ────────────────────────────
+var label summary_lbl = na
+if barstate.islast
+    label.delete(summary_lbl)
+    bull_count = array.size(bull_boxes)
+    bear_count = array.size(bear_boxes)
+    bias = bull_count > bear_count ? "Bullish FVG bias" : bear_count > bull_count ? "Bearish FVG bias" : "Neutral FVG"
+    summary_lbl := label.new(bar_index, high * 1.001,
+                             "FVG " + bias + " (" + str.tostring(bull_count) + "B/" + str.tostring(bear_count) + "S)",
+                             style=label.style_label_down,
+                             color=color.new(color.purple, 70),
+                             textcolor=color.white,
+                             size=size.small)

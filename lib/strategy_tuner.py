@@ -161,7 +161,7 @@ def refresh_all_performance() -> None:
 
 
 # ── Promotion / demotion decisions ───────────────────────────────────────────
-def _paper_gate_result(strategy_row: dict, metrics: dict, gates: dict) -> tuple[bool, list[str]]:
+def _paper_gate_result(conn, strategy_row: dict, metrics: dict, gates: dict) -> tuple[bool, list[str]]:
     g = gates.get("paper_to_live", {})
     reasons: list[str] = []
 
@@ -193,7 +193,43 @@ def _paper_gate_result(strategy_row: dict, metrics: dict, gates: dict) -> tuple[
     if metrics["max_single_day_loss_pct"] > g.get("no_single_day_loss_pct_above", 5.0):
         reasons.append(f"single_day_loss {metrics['max_single_day_loss_pct']:.2f}% > {g.get('no_single_day_loss_pct_above', 5.0)}%")
 
+    # TV replay gate — if a replay result exists, block promotion when
+    # paper win-rate diverges from replay win-rate by more than the threshold.
+    # Strategies flagged needs_tv_replay must have a replay result before they
+    # can pass this gate.
+    replay_flag = get_system_state(conn, f"needs_tv_replay:{strategy_row['id']}")
+    if replay_flag == "true":
+        tv_replay_wr = _latest_tv_replay_win_rate(strategy_row["id"])
+        if tv_replay_wr is None:
+            reasons.append("TV replay result required before paper→live promotion (run tv_replay_validator)")
+        else:
+            max_dev = g.get("paper_vs_tv_replay_winrate_deviation_max", 0.15)
+            divergence = abs(metrics.get("win_rate", 0) - tv_replay_wr)
+            if divergence > max_dev:
+                reasons.append(
+                    f"TV replay divergence: paper_wr={metrics.get('win_rate', 0):.2f} "
+                    f"vs replay_wr={tv_replay_wr:.2f} (Δ={divergence:.2f} > {max_dev})"
+                )
+
     return (len(reasons) == 0, reasons)
+
+
+def _latest_tv_replay_win_rate(strategy_id: str) -> float | None:
+    """Read the win_rate from the most recent TV replay result for this strategy.
+    Returns None if no replay file exists yet."""
+    import glob as _glob
+    replay_dir = os.path.join(PROJECT_ROOT, "data", "backtests", "tv_replay")
+    safe_id = strategy_id.replace("/", "_").replace(":", "_")
+    files = sorted(_glob.glob(os.path.join(replay_dir, f"{safe_id}__*.json")))
+    if not files:
+        return None
+    try:
+        with open(files[-1]) as f:
+            import json as _json
+            data = _json.load(f)
+        return float(data.get("win_rate") or 0)
+    except Exception:
+        return None
 
 
 def _demotion_triggered(metrics: dict, gates: dict) -> tuple[bool, list[str]]:
@@ -230,7 +266,7 @@ def apply_transitions() -> list[dict]:
             metrics = compute_metrics(trades)
 
             if mode == "paper":
-                passed, reasons = _paper_gate_result(s, metrics, gates)
+                passed, reasons = _paper_gate_result(conn, s, metrics, gates)
                 if passed:
                     set_strategy_mode(conn, sid, "live", reason="paper gate passed")
                     transitions.append({"strategy": sid, "from": "paper", "to": "live", "reasons": reasons})

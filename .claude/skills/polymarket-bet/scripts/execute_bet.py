@@ -53,6 +53,17 @@ def _already_persisted(conn, market_id: str) -> bool:
     return row is not None
 
 
+def _strategy_for(discovery_method: str | None) -> str:
+    """Map a discovery_method tag to the strategy_registry slug that owns the bet.
+
+    Heuristic bets don't deserve the polymarket-smart-money label. Routing them
+    to polymarket-heuristic keeps post-mortem analytics honest.
+    """
+    if not discovery_method or discovery_method == "heuristic_paper":
+        return "polymarket-heuristic"
+    return "polymarket-smart-money"
+
+
 def _persist(conn, bet: dict, mode: str) -> int:
     """Insert trades + polymarket_bets rows. Returns trade_id."""
     qty = round(bet["sized_bet_usd"] / max(bet["market_price"], 0.001), 4)
@@ -60,7 +71,9 @@ def _persist(conn, bet: dict, mode: str) -> int:
         "key_factors": bet.get("key_factors", []),
         "citations": bet.get("citations", []),
         "fails": bet.get("fails", []),
+        "discovery_method": bet.get("discovery_method"),
     })
+    strategy = _strategy_for(bet.get("discovery_method"))
     trade_id = dblib.log_trade(
         conn,
         pillar="polymarket",
@@ -72,7 +85,7 @@ def _persist(conn, bet: dict, mode: str) -> int:
         # Schema CHECK constraint allows {open, closed, cancelled}; we tag
         # paper-vs-live via the `broker` field instead of inventing a status.
         status="open",
-        strategy="polymarket-smart-money",
+        strategy=strategy,
         confluence_score=bet.get("confluence_score"),
         reasoning=reasoning,
         risk_check_result="PASS",
@@ -82,8 +95,9 @@ def _persist(conn, bet: dict, mode: str) -> int:
     conn.execute(
         """INSERT INTO polymarket_bets
             (trade_id, market_id, market_question, market_category,
-             estimated_probability, market_odds, edge_pct, kelly_bet_size)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+             estimated_probability, market_odds, edge_pct, kelly_bet_size,
+             discovery_method, discovery_evidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             trade_id,
             bet["market_id"],
@@ -93,6 +107,8 @@ def _persist(conn, bet: dict, mode: str) -> int:
             bet.get("market_price"),
             bet.get("edge_pct"),
             bet["sized_bet_usd"],
+            bet.get("discovery_method") or "heuristic_paper",
+            bet.get("discovery_evidence"),
         ),
     )
     conn.commit()
@@ -155,8 +171,19 @@ def main() -> int:
     args = parser.parse_args()
 
     today = _today_dir()
-    approved_path = today / "pm_approved_bets.json"
-    if not approved_path.exists():
+    # Prefer the brain-vetoed output when present. brain_pm_sanity_check writes
+    # pm_brain_approved.json with only the bets that survived the Polymarket
+    # Specialist veto (kills Aston Villa pattern). Fall back to the upstream
+    # gate output when the brain check didn't run.
+    brain_path = today / "pm_brain_approved.json"
+    fallback_path = today / "pm_approved_bets.json"
+    if brain_path.exists():
+        approved_path = brain_path
+        print("[execute_bet] using brain-approved bets (pm_brain_approved.json)")
+    elif fallback_path.exists():
+        approved_path = fallback_path
+        print("[execute_bet] brain check missing — falling back to pm_approved_bets.json")
+    else:
         print("[execute_bet] no approved bets file — skip")
         return 0
     payload = json.loads(approved_path.read_text())

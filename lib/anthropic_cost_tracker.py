@@ -38,17 +38,24 @@ from lib.db import get_connection  # noqa: E402
 
 PRICING_PER_MTOK = {
     # (input_usd, cached_input_usd, output_usd)
-    "claude-haiku-3-5":   (0.80, 0.08,  4.00),
-    "claude-sonnet-4-5":  (3.00, 0.30, 15.00),
-    "claude-sonnet-4-7":  (3.00, 0.30, 15.00),
-    "claude-opus-4-7":    (15.00, 1.50, 75.00),
+    "claude-haiku-3-5":     (0.80, 0.08,  4.00),
+    "claude-haiku-4-5":     (1.00, 0.10,  5.00),
+    "claude-sonnet-4-5":    (3.00, 0.30, 15.00),
+    "claude-sonnet-4-6":    (3.00, 0.30, 15.00),
+    "claude-sonnet-4-7":    (3.00, 0.30, 15.00),
+    "claude-opus-4-7":      (15.00, 1.50, 75.00),
 }
 
 # Jobs allow-listed once monthly cap is hit. The bot keeps making decisions
-# but with thinner context.
-ALLOWLIST_AFTER_CAP = {"opus_daily_brief"}
+# but with thinner context. These are the load-bearing safety/judgment calls
+# that should never be silently skipped.
+ALLOWLIST_AFTER_CAP = {
+    "opus_daily_brief",
+    "brain_pm_sanity_check",   # kills Aston Villa pattern — never skip
+    "brain_news_shock",        # urgent close decisions on macro events
+}
 
-DEFAULT_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_USD_CAP", "50"))
+DEFAULT_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_USD_CAP", "250"))
 
 
 SCHEMA = """

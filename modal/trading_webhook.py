@@ -42,6 +42,43 @@ def _notify(msg: str) -> None:
     except Exception as e:
         print(f"  [notify-failed] {e}")
 
+
+# In-process flag so we only emit the empty-wallets warning to Telegram once
+# per container lifetime (otherwise the hourly cron spams the user).
+_PM_GUARD_WARNED = False
+
+
+def _pm_guard_ok() -> bool:
+    """Refuse to run the PM hot-path when tracked_accounts is empty.
+
+    Background: the design intent is to copy curated whale wallets; without
+    them, the system falls back to a confluence heuristic that synthesises
+    edges from price patterns alone (the Aston Villa pattern). The Stage 1
+    fix already gates _paper_heuristic_estimate, but this guard provides
+    defence in depth: if wallets haven't been discovered, the PM block
+    short-circuits entirely.
+    """
+    global _PM_GUARD_WARNED
+    try:
+        with open("/app/config/polymarket_accounts.json") as f:
+            cfg = json.load(f)
+        tracked = cfg.get("tracked_accounts", []) or []
+        if tracked:
+            return True
+        msg = (
+            "⚠️ <b>PM hot-path SKIPPED</b>\n"
+            "<i>tracked_accounts is empty.</i> Run discover_wallets.py "
+            "(weekly cron Sun 12:00 UTC) or trigger manually."
+        )
+        if not _PM_GUARD_WARNED:
+            _notify(msg)
+            _PM_GUARD_WARNED = True
+        print(f"  [pm-guard] skipping PM block — tracked_accounts empty")
+        return False
+    except Exception as e:
+        print(f"  [pm-guard] could not read polymarket_accounts.json: {e} — allowing PM block")
+        return True
+
 # Modal app definition
 app = modal.App("autonomous-trading-system")
 
@@ -160,6 +197,7 @@ def market_scan():
     conf = "/app/.claude/skills/confluence-engine/scripts"
     ex   = "/app/.claude/skills/execute-trade/scripts"
     sig  = "/app/.claude/skills/signal-follow/scripts"
+    tv   = "/app/.claude/skills/tradingview-analysis/scripts"
 
     _run(f"{scan}/fetch_market_data.py", timeout=180)
     _run(f"{scan}/technical_analysis.py", timeout=120)
@@ -168,6 +206,10 @@ def market_scan():
     # Filter to "paper" since 65 strategies are in paper mode and 0 in live —
     # this is exactly the dataset we're trying to grow during paper trading.
     _run(f"{scan}/screener.py", "--mode-filter", "paper", timeout=180)
+    # TV pull scanner: multi-TF alignment for the whole watchlist. Runs in
+    # ccxt-fallback mode here (no MCP in Modal). Output lands in tv_pull.json
+    # which confluence_detector's glob loader picks up automatically.
+    _run(f"{tv}/tv_pull_scanner.py", timeout=180)
     _run(f"{conf}/confluence_detector.py", timeout=120)
     _run(f"{conf}/score_setup.py", timeout=60)
     # alert_generator merges scored confluences with screener entry/SL/TP into alerts.json
@@ -176,15 +218,25 @@ def market_scan():
     _run(f"{ex}/pipeline_runner.py", timeout=180)
     _run(f"{ex}/position_monitor.py", timeout=60)
 
+    # Portfolio-level risk snapshot after positions settle. Cheap (under 30s
+    # even with 10+ open positions) and emits Telegram alerts on VaR/correlation
+    # breaches. Persists to portfolio_risk_snapshots for the daily report.
+    rc = "/app/.claude/skills/risk-check/scripts"
+    _run(f"{rc}/portfolio_risk_runner.py", timeout=120)
+
     # Polymarket pillar — full hot-path. Cheap unless candidates clear the
     # confluence gate, in which case Perplexity fires (capped at PM_MAX_LLM_CALLS).
-    pm = "/app/.claude/skills/polymarket-bet/scripts"
-    _run(f"{pm}/discover_markets.py", timeout=120)
-    _run(f"{pm}/track_wallet_activity.py", timeout=90)
-    _run(f"{pm}/signal_engine.py", timeout=60)
-    _run(f"{pm}/estimate_probability.py", timeout=300)
-    _run(f"{pm}/risk_gate_pm.py", timeout=60)
-    _run(f"{pm}/execute_bet.py", timeout=120)
+    if _pm_guard_ok():
+        pm = "/app/.claude/skills/polymarket-bet/scripts"
+        _run(f"{pm}/discover_markets.py", timeout=120)
+        _run(f"{pm}/track_wallet_activity.py", timeout=90)
+        _run(f"{pm}/signal_engine.py", timeout=60)
+        _run(f"{pm}/estimate_probability.py", timeout=300)
+        _run(f"{pm}/risk_gate_pm.py", timeout=60)
+        # Polymarket Specialist veto layer — kills Aston Villa pattern at source.
+        # Cheap (~$0.003/bet on Sonnet 4.6 with cache hits).
+        _run(f"{pm}/brain_pm_sanity_check.py", timeout=120)
+        _run(f"{pm}/execute_bet.py", timeout=120)
 
     print(f"[{timestamp}] Market scan complete")
 
@@ -246,12 +298,16 @@ def polymarket_scan():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Polymarket scan starting")
+    if not _pm_guard_ok():
+        print(f"[{timestamp}] Polymarket scan skipped — tracked_accounts empty")
+        return
     pm = "/app/.claude/skills/polymarket-bet/scripts"
     _run(f"{pm}/discover_markets.py", timeout=120)
     _run(f"{pm}/track_wallet_activity.py", timeout=120)
     _run(f"{pm}/signal_engine.py", timeout=60)
     _run(f"{pm}/estimate_probability.py", timeout=300)
     _run(f"{pm}/risk_gate_pm.py", timeout=60)
+    _run(f"{pm}/brain_pm_sanity_check.py", timeout=120)
     _run(f"{pm}/execute_bet.py", timeout=120)
     _notify(f"🎯 Polymarket scan complete at {timestamp[:16]}")
     print(f"[{timestamp}] Polymarket scan complete")
@@ -288,6 +344,12 @@ def daily_report():
     # the Claude UI (subscription) and feed Opus's verdict back via ingest.
     _run(f"{imp}/trade_review_packet.py", timeout=60)
 
+    # Opus 4.7 desk synthesis — full multi-agent end-of-day brief. Replaces
+    # the manual paste loop for trade reviews. Sonnet critic red-teams the
+    # synth output. Falls back to a heuristic skeleton when budget cap hit.
+    news = "/app/.claude/skills/news-monitor/scripts"
+    _run(f"{news}/brain_daily_synthesis.py", timeout=240)
+
     # Resolve any PM bets whose markets settled overnight, credit paper balance.
     pm = "/app/.claude/skills/polymarket-bet/scripts"
     _run(f"{pm}/pm_resolver.py", timeout=120)
@@ -295,11 +357,13 @@ def daily_report():
     # Late-stage Polymarket convergence sweep — concentrate on markets at
     # 90-95c resolving in 1-7 days. Reuses the standard PM pipeline with a
     # tighter pre-filter.
-    _run(f"{pm}/discover_markets.py", timeout=120)
-    _run(f"{pm}/signal_engine.py", timeout=60)
-    _run(f"{pm}/estimate_probability.py", timeout=300)
-    _run(f"{pm}/risk_gate_pm.py", timeout=60)
-    _run(f"{pm}/execute_bet.py", timeout=120)
+    if _pm_guard_ok():
+        _run(f"{pm}/discover_markets.py", timeout=120)
+        _run(f"{pm}/signal_engine.py", timeout=60)
+        _run(f"{pm}/estimate_probability.py", timeout=300)
+        _run(f"{pm}/risk_gate_pm.py", timeout=60)
+        _run(f"{pm}/brain_pm_sanity_check.py", timeout=120)
+        _run(f"{pm}/execute_bet.py", timeout=120)
 
     summary_path = "/app/data/reports/latest_daily_summary.txt"
     summary = ""

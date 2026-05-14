@@ -64,6 +64,45 @@ def _expected_pnl_distribution(conn, strategy_id: str) -> tuple[float | None, fl
     return statistics.mean(pnls), (statistics.pstdev(pnls) or None)
 
 
+def _check_tv_replay_divergence(conn, strategy_id: str) -> str | None:
+    """Return a flag string if paper win-rate diverges >10% from latest TV replay result.
+
+    TV replay results are written by lib/tv_replay_validator.py to
+    data/backtests/tv_replay/. When the divergence exceeds the threshold the
+    strategy needs a replay re-run to localise whether the gap is a data-feed
+    artefact or a genuine edge decay.
+    """
+    import glob as _glob
+    replay_dir = os.path.join(PROJECT_ROOT, "data", "backtests", "tv_replay")
+    pattern = os.path.join(replay_dir, f"{strategy_id.replace('/', '_').replace(':', '_')}__*.json")
+    files = sorted(_glob.glob(pattern))
+    if not files:
+        return None
+    try:
+        with open(files[-1]) as f:
+            replay = json.load(f)
+        replay_wr = float(replay.get("win_rate") or 0)
+    except Exception:
+        return None
+
+    rows = conn.execute(
+        "SELECT pnl_usd FROM trades WHERE strategy=? AND status='closed' ORDER BY closed_at DESC LIMIT 30",
+        (strategy_id,),
+    ).fetchall()
+    if len(rows) < 5:
+        return None
+    paper_wins = sum(1 for r in rows if (r["pnl_usd"] or 0) > 0)
+    paper_wr = paper_wins / len(rows)
+
+    divergence = abs(paper_wr - replay_wr)
+    if divergence >= 0.10:
+        return (
+            f"TV replay divergence: paper_wr={paper_wr:.2f} vs replay_wr={replay_wr:.2f} "
+            f"(Δ={divergence:.2f}) — re-run tv_replay_validator to localise gap."
+        )
+    return None
+
+
 def analyse_trade(conn, trade: dict) -> dict:
     """Return a post-mortem dict for a single closed trade."""
     notes: list[str] = []
@@ -123,6 +162,12 @@ def analyse_trade(conn, trade: dict) -> dict:
             flags.append(f"High-confluence ({confluence:.0f}) loss — review signal weights.")
         if confluence < 60 and pnl_pct > 0:
             notes.append(f"Low-confluence ({confluence:.0f}) winner — lucky or over-filtered?")
+
+    # TV replay divergence flag — compare paper win-rate against latest TV replay result
+    if strategy:
+        tv_flag = _check_tv_replay_divergence(conn, strategy)
+        if tv_flag:
+            flags.append(tv_flag)
 
     verdict = "win" if pnl_pct > 0 else "loss" if pnl_pct < 0 else "scratch"
 

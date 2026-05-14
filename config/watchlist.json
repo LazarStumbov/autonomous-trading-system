@@ -104,7 +104,10 @@
       "polymarket_whale_entry": 0.7,
       "news_catalyst": 1.5,
       "volume_anomaly": 0.9,
-      "cross_asset_correlation": 0.6
+      "cross_asset_correlation": 0.6,
+      "tradingview": 1.1,
+      "structure_break": 1.0,
+      "mean_reversion": 0.9
     }
   }
 }

@@ -1,0 +1,68 @@
+// Liquidity Sweep Detector
+// Detects stop-hunt wicks that swept a prior swing high/low and then reversed.
+// Writes labels so `data_get_pine_labels` can read the sweep price and bias.
+//
+// A sweep = price briefly exceeded the swing level (wick) but closed back
+// inside → classic stop-hunt before a genuine move in the opposite direction.
+//
+// Bot reads via: tradingview_bridge.read_pine_levels(mcp_call, "LiquiditySweeps")
+// Label text format: "LSweep <direction> <price>" e.g. "LSweep long 65432.5"
+
+//@version=5
+indicator("LiquiditySweeps", overlay=true, max_labels_count=30)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+pivot_left  = input.int(10, "Pivot lookback left",  minval=3)
+pivot_right = input.int(3,  "Pivot lookback right", minval=1)
+min_wick_pct = input.float(0.1, "Min wick % of ATR", minval=0.05, step=0.05)
+atr_len     = input.int(14, "ATR length",           minval=2)
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+atr = ta.atr(atr_len)
+
+ph = ta.pivothigh(high, pivot_left, pivot_right)
+pl = ta.pivotlow(low,  pivot_left, pivot_right)
+
+// Track most recent swing levels
+var float last_ph = na
+var float last_pl = na
+if not na(ph)
+    last_ph := ph
+if not na(pl)
+    last_pl := pl
+
+// Bullish sweep: wick below prior swing low, but closed above it
+bull_sweep = not na(last_pl) and
+             low < last_pl and
+             close > last_pl and
+             (last_pl - low) >= min_wick_pct * atr
+
+// Bearish sweep: wick above prior swing high, but closed below it
+bear_sweep = not na(last_ph) and
+             high > last_ph and
+             close < last_ph and
+             (high - last_ph) >= min_wick_pct * atr
+
+if bull_sweep
+    sweep_price = last_pl
+    label.new(bar_index, low,
+              "LSweep long " + str.tostring(sweep_price, format.mintick),
+              style=label.style_label_up,
+              color=color.new(color.green, 50),
+              textcolor=color.white,
+              size=size.small)
+    last_pl := na  // consumed — don't re-fire on same level
+
+if bear_sweep
+    sweep_price = last_ph
+    label.new(bar_index, high,
+              "LSweep short " + str.tostring(sweep_price, format.mintick),
+              style=label.style_label_down,
+              color=color.new(color.red, 50),
+              textcolor=color.white,
+              size=size.small)
+    last_ph := na  // consumed
+
+// ── Alert conditions ─────────────────────────────────────────────────────────
+alertcondition(bull_sweep, title="Bullish Liquidity Sweep",  message="Bullish LSweep on {{ticker}} at {{close}}")
+alertcondition(bear_sweep, title="Bearish Liquidity Sweep",  message="Bearish LSweep on {{ticker}} at {{close}}")

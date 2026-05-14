@@ -29,6 +29,8 @@ class SignalType(str, Enum):
     NEWS_CATALYST = "news_catalyst"
     VOLUME_ANOMALY = "volume_anomaly"
     CROSS_ASSET_CORRELATION = "cross_asset_correlation"
+    STRUCTURE_BREAK = "structure_break"      # TV: FVG, order blocks, liquidity sweeps
+    MEAN_REVERSION = "mean_reversion"        # TV: RSI, BB, VWAP reversion setups
 
 
 class RiskVerdict(str, Enum):

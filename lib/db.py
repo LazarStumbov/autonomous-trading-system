@@ -95,8 +95,70 @@ CREATE TABLE IF NOT EXISTS polymarket_bets (
     edge_pct REAL,
     kelly_bet_size REAL,
     resolution TEXT,
-    resolved_at TEXT
+    resolved_at TEXT,
+    -- How the bet was sourced. NOT NULL after backfill in lib.db.migrate_polymarket_discovery_method().
+    -- Values: wallet_cluster_strong | wallet_cluster_weak | wallet_single |
+    -- news_driven_researched | cross_market_arb | heuristic_paper
+    discovery_method TEXT,
+    discovery_evidence TEXT  -- JSON: wallets, citations, news urgency, etc.
 );
+
+-- Portfolio-level risk snapshots (Workstream 4). 15-min cadence from portfolio_risk_runner.
+CREATE TABLE IF NOT EXISTS portfolio_risk_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_at TEXT NOT NULL DEFAULT (datetime('now')),
+    capital_usd REAL,
+    open_position_count INTEGER,
+    gross_exposure_usd REAL,
+    net_exposure_usd REAL,
+    var_95_1d_usd REAL,
+    cvar_95_1d_usd REAL,
+    var_95_pct REAL,
+    avg_pairwise_correlation REAL,
+    max_pairwise_correlation REAL,
+    factor_exposures_json TEXT,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_risk_snap_at ON portfolio_risk_snapshots(snapshot_at);
+
+-- Daily correlation matrix across open positions.
+CREATE TABLE IF NOT EXISTS correlation_matrix_daily (
+    date TEXT NOT NULL,
+    asset_a TEXT NOT NULL,
+    asset_b TEXT NOT NULL,
+    correlation REAL NOT NULL,
+    window_days INTEGER NOT NULL,
+    PRIMARY KEY (date, asset_a, asset_b)
+);
+
+-- Multi-agent brain action log (Workstream 1). One row per LLM call so we
+-- can audit decisions, agreement rates, latency, and cost per agent.
+CREATE TABLE IF NOT EXISTS agent_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    job TEXT NOT NULL,
+    model TEXT NOT NULL,
+    tier TEXT,
+    payload_json TEXT,
+    ok INTEGER NOT NULL DEFAULT 1,
+    usd_cost REAL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_agent_actions_job ON agent_actions(job);
+CREATE INDEX IF NOT EXISTS idx_agent_actions_ts  ON agent_actions(timestamp);
+
+-- Semantic memory: lessons + rules the brain has accumulated. Embedded for RAG
+-- once lib.rag_retrieval lands; for Stage 2 it's a plain text store.
+CREATE TABLE IF NOT EXISTS agent_memory_semantic (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    category TEXT NOT NULL,         -- 'lesson', 'rule', 'observation'
+    subject TEXT,                   -- e.g. 'fomc-mean-reversion', 'pm-extreme-tail'
+    body TEXT NOT NULL,
+    confidence REAL DEFAULT 0.7,
+    source_job TEXT,                -- which agent emitted this
+    superseded_by INTEGER REFERENCES agent_memory_semantic(id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_mem_subject ON agent_memory_semantic(subject);
 
 -- Followed accounts performance tracking
 CREATE TABLE IF NOT EXISTS account_performance (
@@ -242,6 +304,74 @@ CREATE INDEX IF NOT EXISTS idx_hypotheses_status ON strategy_hypotheses(status);
 _SCHEMA_INIT_DONE: set[str] = set()
 
 
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(r[1] == column for r in rows)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Idempotent column-level migrations for tables that pre-existed the new schema.
+
+    SQLite's `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so
+    columns we add to the SCHEMA literal must be ALTER-added separately for
+    legacy DBs. Each migration is wrapped in try/except since a fresh DB will
+    already have the column from the SCHEMA run above.
+    """
+    try:
+        if not _column_exists(conn, "polymarket_bets", "discovery_method"):
+            conn.execute("ALTER TABLE polymarket_bets ADD COLUMN discovery_method TEXT")
+        if not _column_exists(conn, "polymarket_bets", "discovery_evidence"):
+            conn.execute("ALTER TABLE polymarket_bets ADD COLUMN discovery_evidence TEXT")
+        conn.commit()
+    except sqlite3.Error:
+        pass
+    _seed_polymarket_strategies(conn)
+
+
+_PM_STRATEGIES = [
+    {
+        "id": "polymarket-smart-money",
+        "name": "Polymarket Smart Money Copy",
+        "description": "Copy curated whale wallets with multi-signal confluence (cluster, single sharp, high conviction).",
+        "source": "internal",
+        "asset_classes_json": '["polymarket_binary"]',
+        "mode": "paper",
+        "risk_notes": "Requires non-empty tracked_accounts. Quarter-Kelly sizing, min 5% edge.",
+    },
+    {
+        "id": "polymarket-heuristic",
+        "name": "Polymarket Heuristic (paper-only)",
+        "description": "Confluence-driven paper bets without wallet evidence. NOT for live trading.",
+        "source": "internal",
+        "asset_classes_json": '["polymarket_binary"]',
+        "mode": "paper",
+        "risk_notes": "Synthesized edges from confluence score only. Gated to confluence>=80 in execute path.",
+    },
+]
+
+
+def _seed_polymarket_strategies(conn: sqlite3.Connection) -> None:
+    """Seed strategy_registry rows for PM strategies so trades.strategy FKs resolve."""
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        for s in _PM_STRATEGIES:
+            existing = conn.execute(
+                "SELECT id FROM strategy_registry WHERE id=?", (s["id"],)
+            ).fetchone()
+            if existing:
+                continue
+            cols = list(s.keys()) + ["created_at", "updated_at", "mode_changed_at"]
+            vals = list(s.values()) + [now, now, now]
+            placeholders = ", ".join(["?"] * len(cols))
+            conn.execute(
+                f"INSERT INTO strategy_registry ({', '.join(cols)}) VALUES ({placeholders})",
+                vals,
+            )
+        conn.commit()
+    except sqlite3.Error:
+        pass
+
+
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
     """Get a database connection with row factory enabled.
 
@@ -257,6 +387,7 @@ def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
         try:
             conn.executescript(SCHEMA)
             conn.commit()
+            _run_migrations(conn)
             _SCHEMA_INIT_DONE.add(db_path)
         except sqlite3.Error:
             # Don't crash the connection if schema setup races; the table-not-

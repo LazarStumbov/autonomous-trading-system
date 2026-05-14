@@ -1,0 +1,116 @@
+// StructureScanner — consolidated structure-break indicator
+// Replaces three earlier scripts (FVGDetector, OrderBlocks, LiquiditySweeps)
+// because the TradingView Pine editor binds one editor slot per saved script,
+// making three separate chart studies a UX-heavy install. Output is read by
+// `.claude/skills/tradingview-analysis/scripts/pine_output_reader.py` via the
+// MCP `data_get_pine_boxes` / `data_get_pine_labels` tools with
+// study_filter="StructureScanner".
+//
+// Emits:
+//   * FVG boxes (bullish green / bearish red, low opacity)
+//   * Order Block boxes (demand teal / supply orange, higher contrast)
+//   * Liquidity sweep labels: "LSweep <long|short> <price>"
+//   * Summary label "Struct BULL/BEAR bias (...)"
+
+//@version=5
+indicator("StructureScanner", overlay=true, max_boxes_count=100, max_labels_count=50)
+
+fvg_min_gap  = input.float(0.05, "FVG min gap %",       minval=0.01, step=0.01, group="FVG")
+ob_impulse   = input.float(1.5,  "OB impulse ATR mult", minval=0.5,  step=0.1,  group="OrderBlocks")
+ob_lookback  = input.int(20,     "OB max age bars",     minval=5,               group="OrderBlocks")
+atr_len      = input.int(14,     "ATR length",          minval=2)
+piv_left     = input.int(10,     "LSweep pivot left",   minval=3,               group="LSweep")
+piv_right    = input.int(3,      "LSweep pivot right",  minval=1,               group="LSweep")
+sweep_minwick = input.float(0.1, "LSweep min wick/ATR", minval=0.05, step=0.05, group="LSweep")
+
+atr = ta.atr(atr_len)
+body = math.abs(close - open)
+
+bull_fvg = low > high[2]  and (low - high[2]) / high[2] * 100 >= fvg_min_gap
+bear_fvg = high < low[2]  and (low[2] - high) / low[2]  * 100 >= fvg_min_gap
+var box[] fvg_bull = array.new_box()
+var box[] fvg_bear = array.new_box()
+if bull_fvg
+    b = box.new(bar_index[2], low, bar_index, high[2], border_color=color.new(color.green, 60), bgcolor=color.new(color.green, 85), border_width=1)
+    array.push(fvg_bull, b)
+if bear_fvg
+    b = box.new(bar_index[2], high, bar_index, low[2], border_color=color.new(color.red, 60), bgcolor=color.new(color.red, 85), border_width=1)
+    array.push(fvg_bear, b)
+
+bullish_impulse = close > open and body >= ob_impulse * atr
+bearish_impulse = close < open and body >= ob_impulse * atr
+demand_ob = bullish_impulse and close[1] < open[1]
+supply_ob = bearish_impulse and close[1] > open[1]
+var box[] ob_demand = array.new_box()
+var box[] ob_supply = array.new_box()
+if demand_ob
+    b = box.new(bar_index[1], low[1], bar_index, high[1], border_color=color.new(color.teal, 40), bgcolor=color.new(color.teal, 80), border_width=2)
+    array.push(ob_demand, b)
+if supply_ob
+    b = box.new(bar_index[1], low[1], bar_index, high[1], border_color=color.new(color.orange, 40), bgcolor=color.new(color.orange, 80), border_width=2)
+    array.push(ob_supply, b)
+
+if barstate.isconfirmed
+    cutoff = bar_index - ob_lookback
+    if array.size(fvg_bull) > 0
+        for i = array.size(fvg_bull) - 1 to 0
+            b = array.get(fvg_bull, i)
+            if close < box.get_bottom(b)
+                box.delete(b)
+                array.remove(fvg_bull, i)
+            else
+                box.set_right(b, bar_index)
+    if array.size(fvg_bear) > 0
+        for i = array.size(fvg_bear) - 1 to 0
+            b = array.get(fvg_bear, i)
+            if close > box.get_top(b)
+                box.delete(b)
+                array.remove(fvg_bear, i)
+            else
+                box.set_right(b, bar_index)
+    if array.size(ob_demand) > 0
+        for i = array.size(ob_demand) - 1 to 0
+            b = array.get(ob_demand, i)
+            if close < box.get_bottom(b) or box.get_left(b) < cutoff
+                box.delete(b)
+                array.remove(ob_demand, i)
+            else
+                box.set_right(b, bar_index)
+    if array.size(ob_supply) > 0
+        for i = array.size(ob_supply) - 1 to 0
+            b = array.get(ob_supply, i)
+            if close > box.get_top(b) or box.get_left(b) < cutoff
+                box.delete(b)
+                array.remove(ob_supply, i)
+            else
+                box.set_right(b, bar_index)
+
+ph = ta.pivothigh(high, piv_left, piv_right)
+pl = ta.pivotlow(low,  piv_left, piv_right)
+var float last_ph = na
+var float last_pl = na
+if not na(ph)
+    last_ph := ph
+if not na(pl)
+    last_pl := pl
+bull_sweep = not na(last_pl) and low < last_pl and close > last_pl and (last_pl - low) >= sweep_minwick * atr
+bear_sweep = not na(last_ph) and high > last_ph and close < last_ph and (high - last_ph) >= sweep_minwick * atr
+if bull_sweep
+    label.new(bar_index, low, "LSweep long " + str.tostring(last_pl, format.mintick), style=label.style_label_up, color=color.new(color.green, 50), textcolor=color.white, size=size.small)
+    last_pl := na
+if bear_sweep
+    label.new(bar_index, high, "LSweep short " + str.tostring(last_ph, format.mintick), style=label.style_label_down, color=color.new(color.red, 50), textcolor=color.white, size=size.small)
+    last_ph := na
+
+var label summary_lbl = na
+if barstate.islast
+    label.delete(summary_lbl)
+    fb = array.size(fvg_bull)
+    fs = array.size(fvg_bear)
+    obd = array.size(ob_demand)
+    obs = array.size(ob_supply)
+    bull_score = fb + obd
+    bear_score = fs + obs
+    bias = bull_score > bear_score ? "BULL bias" : bear_score > bull_score ? "BEAR bias" : "Neutral"
+    txt = "Struct " + bias + " (FVG " + str.tostring(fb) + "B/" + str.tostring(fs) + "S | OB " + str.tostring(obd) + "D/" + str.tostring(obs) + "S)"
+    summary_lbl := label.new(bar_index, high * 1.001, txt, style=label.style_label_down, color=color.new(color.purple, 70), textcolor=color.white, size=size.small)

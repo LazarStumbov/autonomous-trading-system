@@ -119,29 +119,49 @@ def _shrink_to_market(p: float, low: float, high: float, market_price: float) ->
     return p
 
 
+def _has_wallet_evidence(cand: dict) -> bool:
+    """Did signal_engine flag any smart-money or news evidence on this candidate?
+
+    Anything sourced from wallet activity (cluster/single_sharp) or curated
+    news urgency counts; pure late-stage / obscure / cross-market score
+    components do NOT — those are price-pattern heuristics, not external evidence.
+    """
+    signals = cand.get("signals") or {}
+    if signals.get("cluster") or signals.get("smart_money"):
+        return True
+    if signals.get("news"):
+        return True
+    return False
+
+
 def _paper_heuristic_estimate(cand: dict, market_price: float) -> dict | None:
     """Paper-mode-only fallback when Perplexity is unavailable.
 
-    Without an LLM call we cannot do real research, but the user wants more
-    paper bets so the journal + position monitor have data to analyse. This
-    builds a small heuristic edge from the existing confluence score and
-    smart-money side bias — never enough to drive a live trade, but enough
-    to make the funnel produce bets in paper mode.
+    Gated to candidates with either confluence>=80 OR wallet evidence.
+    Without one of those, synthesising an edge produces Aston Villa
+    nonsense: a 0.0015 YES priced at a tiny synthetic edge.
 
-    Returns None if the candidate doesn't merit any synthetic estimate
-    (low confluence, missing direction). Edge is capped at 6% to keep
-    paper P&L plausible.
+    Returns None if the candidate doesn't merit any synthetic estimate.
+    Also kills extreme-tail markets (price <5% or >95%) absent wallet evidence —
+    these are exactly the Aston Villa pattern.
     """
     if os.environ.get("PAPER_MODE", "").lower() != "true":
         return None
     conf = float(cand.get("confluence_score") or 0)
-    if conf < 20:  # below this, no edge worth simulating even on paper
+    has_evidence = _has_wallet_evidence(cand)
+
+    # Hard gate: confluence>=80 OR wallet evidence required.
+    if conf < 80 and not has_evidence:
         return None
-    side = (cand.get("smart_money_side") or "yes").lower()
-    # Calibrated to observed paper-mode score distribution: most candidates
-    # without smart-money signals top out around 30. (conf - 20) / 500 gives
-    # conf=30 → 2% edge, conf=45 → 5%, conf=70+ → 6% cap.
-    raw_edge = min(0.06, max(0.0, (conf - 20) / 500.0))
+
+    # Extreme-tail veto: if market price is in [0.05, 0.95] tails without
+    # explicit wallet evidence, refuse — we have no informational edge there.
+    if (market_price < 0.05 or market_price > 0.95) and not has_evidence:
+        return None
+
+    side = (cand.get("smart_money_side") or cand.get("suggested_outcome") or "yes").lower()
+    # Edge sized by confluence above the 60 threshold, capped at 6%.
+    raw_edge = min(0.06, max(0.005, (conf - 60) / 500.0))
     direction_signed = +raw_edge if side == "yes" else -raw_edge
     p = max(0.02, min(0.98, market_price + direction_signed))
     return {
@@ -149,7 +169,11 @@ def _paper_heuristic_estimate(cand: dict, market_price: float) -> dict | None:
         "low": max(0.0, p - 0.08),
         "high": min(1.0, p + 0.08),
         "base_rate": market_price,
-        "key_factors": [f"paper heuristic from confluence={conf:.0f}, smart-money={side}"],
+        "key_factors": [
+            f"paper heuristic from confluence={conf:.0f}, side={side}",
+            "wallet_evidence=" + ("yes" if has_evidence else "no"),
+        ],
+        "_discovery_method": "wallet_single" if has_evidence else "heuristic_paper",
     }
 
 
