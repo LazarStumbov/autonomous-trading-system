@@ -262,6 +262,11 @@ def opus_daily_brief():
     print(f"[{timestamp}] Running Opus 4.7 daily brief...")
 
     news = "/app/.claude/skills/news-monitor/scripts"
+    # Step 0: Free-tier data feeds (Workstream 2 Phase A). Cheap, no API cost.
+    # FRED needs FRED_API_KEY in secrets; the rest run without keys.
+    _run(f"{news}/fred_macro.py", timeout=120)
+    _run(f"{news}/defillama_tvl.py", timeout=120)
+    _run(f"{news}/econ_calendar.py", timeout=120)
     # Step 1: Refresh Perplexity research log (six topics, each independent).
     _run(f"{news}/research_log.py", timeout=300)
     # Step 2: Single Opus 4.7 call that consumes the research + open positions
