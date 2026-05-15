@@ -46,7 +46,12 @@ from lib.db import get_connection, get_system_state, set_system_state
 
 
 def is_paper_mode() -> bool:
-    """Returns True if PAPER_MODE=true is in env or .env."""
+    """Returns True if PAPER_MODE=true is in env or .env.
+
+    Kept for backwards compatibility. New code should use `broker_mode()`
+    which returns one of {'synthetic', 'demo', 'live'} and is the single
+    dispatch authority for execution_engine + position_monitor.
+    """
     val = os.environ.get("PAPER_MODE", "").lower().strip()
     if val:
         return val == "true"
@@ -57,6 +62,45 @@ def is_paper_mode() -> bool:
         return env.get("PAPER_MODE", "").lower().strip() == "true"
     except Exception:
         return False
+
+
+def broker_mode() -> str:
+    """Single source of truth for broker dispatch. Returns 'synthetic' / 'demo' / 'live'.
+
+    Resolution order:
+      1. `BROKER_MODE` env var (or .env), if set, wins.
+      2. Otherwise, fall back to legacy `PAPER_MODE`:
+         - PAPER_MODE=true  → 'synthetic'  (current default; preserves old behaviour)
+         - PAPER_MODE=false → 'live'
+
+    Modes:
+      - 'synthetic'  internal simulation via paper_engine.simulate_order. No real
+                     broker call, fills priced off the public ccxt feed.
+      - 'demo'       real broker calls against demo/testnet account. Real fills,
+                     real slippage, virtual capital. OKX demo by default.
+      - 'live'       real broker, real money. Gated by lib.live_readiness.
+    """
+    raw = os.environ.get("BROKER_MODE", "").lower().strip()
+    if not raw:
+        try:
+            from dotenv import dotenv_values  # type: ignore
+            env = dotenv_values(os.path.join(PROJECT_ROOT, ".env"))
+            raw = (env.get("BROKER_MODE", "") or "").lower().strip()
+        except Exception:
+            raw = ""
+    if raw in ("synthetic", "paper", "sim", "simulation"):
+        return "synthetic"
+    if raw in ("demo", "testnet", "paper-broker"):
+        return "demo"
+    if raw == "live":
+        return "live"
+    # No explicit BROKER_MODE → fall back to PAPER_MODE for backwards compat.
+    return "synthetic" if is_paper_mode() else "live"
+
+
+def is_real_broker_mode() -> bool:
+    """True when broker_mode() routes to a real broker (demo OR live)."""
+    return broker_mode() in ("demo", "live")
 
 
 def starting_balance() -> float:

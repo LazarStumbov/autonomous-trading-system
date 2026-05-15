@@ -65,20 +65,41 @@ def _check_no_halt(conn) -> tuple[bool, str]:
 
 
 def _check_okx_keys() -> tuple[bool, str]:
+    """Check OKX credentials are present, gated by BROKER_MODE.
+
+    For BROKER_MODE=live we need real OKX_API_KEY/OKX_SECRET_KEY/OKX_PASSPHRASE
+    AND OKX_DEMO must NOT be true. For BROKER_MODE=demo we still need keys
+    (OKX demo trading requires a separate key pair generated in the demo
+    portal), but OKX_DEMO must be true. Fixes the earlier typo where the
+    env var was `OKX_SECRET` instead of `OKX_SECRET_KEY` — the okx_adapter
+    reads `OKX_SECRET_KEY`, so the live-readiness check was looking in the
+    wrong place.
+    """
     key = os.environ.get("OKX_API_KEY", "")
-    secret = os.environ.get("OKX_SECRET", "")
+    # okx_adapter reads OKX_SECRET_KEY; accept either name for backwards compat
+    secret = os.environ.get("OKX_SECRET_KEY", "") or os.environ.get("OKX_SECRET", "")
     passphrase = os.environ.get("OKX_PASSPHRASE", "")
+    okx_demo = os.environ.get("OKX_DEMO", "").lower().strip()
     if not (key and secret and passphrase):
         try:
             from dotenv import dotenv_values
             env = dotenv_values(os.path.join(PROJECT_ROOT, ".env"))
             key = key or env.get("OKX_API_KEY", "")
-            secret = secret or env.get("OKX_SECRET", "")
+            secret = secret or env.get("OKX_SECRET_KEY", "") or env.get("OKX_SECRET", "")
             passphrase = passphrase or env.get("OKX_PASSPHRASE", "")
+            okx_demo = okx_demo or (env.get("OKX_DEMO", "") or "").lower().strip()
         except Exception:
             pass
-    ok = bool(key and secret and passphrase)
-    return ok, f"OKX live keys: {'✓' if ok else '✗ (OKX_API_KEY / OKX_SECRET / OKX_PASSPHRASE missing)'}"
+    keys_present = bool(key and secret and passphrase)
+    broker_mode_val = (os.environ.get("BROKER_MODE", "") or "").lower().strip()
+    if broker_mode_val == "live":
+        if not keys_present:
+            return False, "OKX live keys: ✗ (OKX_API_KEY / OKX_SECRET_KEY / OKX_PASSPHRASE missing)"
+        if okx_demo == "true":
+            return False, "OKX live keys: ✗ (OKX_DEMO=true with BROKER_MODE=live — refusing)"
+        return True, "OKX live keys: ✓"
+    # demo or synthetic — keys are nice-to-have for demo, irrelevant for synthetic
+    return keys_present, f"OKX keys: {'✓' if keys_present else '(missing — only needed for live or demo)'}"
 
 
 def _check_partial_tp_hits(conn) -> tuple[bool, str]:

@@ -48,7 +48,9 @@
       "daily_loss_halt_pct": 6.0,
       "weekly_loss_halt_pct": 15.0,
       "require_manual_resume_after_weekly_halt": true
-    }
+    },
+    "macro_blackout_enabled": true,
+    "max_new_trades_per_cycle": 2
   },
   "polymarket": {
     "max_bet_pct_bankroll": 5.0,

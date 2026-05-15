@@ -1,5 +1,29 @@
 # Polymarket Log
 
+## 2026-05-15 — Stale-bet cleanup
+
+Cancelled 7 still-open PM bets (trade ids 6, 7, 8, 9, 10, 12, 13). All carried
+`discovery_method='heuristic_paper'`, all were placed before the Stage-1
+safeguards landed (extreme-tail veto on `<0.05` or `>0.95` market price absent
+wallet evidence, confluence-≥80-or-evidence gate, brain specialist rule check).
+None would survive the current PM pipeline if re-evaluated today.
+
+Status moved `open → cancelled` with pnl_usd=0 and exit_price=entry_price. They
+are annulled, not closed-with-loss — the system did not have informed signals
+when it placed them, so calling these "losses" would corrupt the training
+distribution.
+
+Migration: `migrations/2026-05-15_cancel_stale_pm_bets.sql` (idempotent on
+status='open' + discovery_method='heuristic_paper').
+
+Forward: every new PM bet must clear `brain_pm_sanity_check` (deterministic
+fallback covers rules 1–3 even with no Anthropic key). `tracked_accounts` is
+still empty in `config/polymarket_accounts.json`; the PM hot-path guard in
+`modal/trading_webhook.py::_pm_guard_ok` short-circuits the pipeline until
+`discover_wallets.py` (Sunday weekly cron) produces a populated wallet list.
+
+---
+
 ## Bet #6 · YES · Will the Detroit Pistons win the NBA Eastern Conference Finals?  ·  2026-05-11 12:44 UTC
 
 - **Mode:** paper

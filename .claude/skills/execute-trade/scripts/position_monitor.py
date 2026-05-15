@@ -35,7 +35,7 @@ from lib.db import (
 )
 from lib.risk_engine import load_risk_config
 from lib.category_cooldown import register_trade_close, asset_to_category
-from lib.paper_engine import is_paper_mode, get_public_price, credit_paper_balance, is_paper_trade
+from lib.paper_engine import get_public_price, credit_paper_balance, is_paper_trade, broker_mode
 
 # Real-broker imports — only used when not in paper mode
 def get_exchange():
@@ -142,13 +142,20 @@ def monitor_positions(dry_run: bool = False) -> dict:
         conn.close()
         return {"status": "NO_POSITIONS", "positions": []}
 
-    paper = is_paper_mode()
+    # P1: broker_mode() is the single dispatch authority.
+    #   synthetic → no exchange call, public price feed (legacy paper path)
+    #   demo/live → real OKX exchange (demo URL gated by OKX_DEMO env var)
+    mode = broker_mode()
+    paper = (mode == "synthetic")
 
     if paper:
-        # Paper mode: no exchange queries, only public price fetches per-trade
+        # Synthetic mode: no exchange queries, only public price fetches per-trade
         exchange = None
         ex_pos_map = {}
     else:
+        # demo or live: same code path; okx_adapter.get_exchange() handles URL
+        # switching internally via OKX_DEMO env var (set by execution_engine when
+        # BROKER_MODE=demo, also user-controllable for direct testing).
         exchange = get_exchange() if not dry_run else None
         exchange_positions = get_positions(exchange) if exchange else []
         ex_pos_map = {p["symbol"]: p for p in exchange_positions}

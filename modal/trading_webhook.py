@@ -43,6 +43,66 @@ def _notify(msg: str) -> None:
         print(f"  [notify-failed] {e}")
 
 
+def _heartbeat(job: str) -> None:
+    """Write last_cron_at + last_cron_job to system_state at the start of every cron.
+
+    P0 observability: without this we have no way to tell if a cron stopped firing.
+    A separate dead-man check in news_scan (every 15min) reads these fields and
+    alerts the user if market_scan hasn't checked in for >2 hours.
+    """
+    try:
+        sys.path.insert(0, "/app")
+        from lib.db import get_connection, set_system_state
+        from datetime import datetime as _dt, timezone as _tz
+        conn = get_connection()
+        try:
+            now = _dt.now(_tz.utc).isoformat()
+            set_system_state(conn, "last_cron_at", now)
+            set_system_state(conn, "last_cron_job", job)
+            set_system_state(conn, f"last_cron_at_{job}", now)
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  [heartbeat-failed] {e}")
+
+
+def _dead_man_check(max_stale_minutes: int = 120) -> None:
+    """Alert if market_scan hasn't checked in within `max_stale_minutes`.
+
+    Called from news_scan (every 15min). Watches market_scan specifically because
+    market_scan is the trade-generating cron — if it's silent, the system is
+    offline even if news_scan is running. Idempotent: writes
+    system_state.last_dead_man_alert_at to avoid spamming Telegram.
+    """
+    try:
+        sys.path.insert(0, "/app")
+        from lib.db import get_connection, get_system_state, set_system_state
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        conn = get_connection()
+        try:
+            last = get_system_state(conn, "last_cron_at_market_scan")
+            if not last:
+                return  # first deploy, no baseline yet
+            ts = _dt.fromisoformat(last.replace("Z", "+00:00"))
+            age_min = (_dt.now(_tz.utc) - ts).total_seconds() / 60
+            if age_min < max_stale_minutes:
+                return  # alive
+            last_alert = get_system_state(conn, "last_dead_man_alert_at")
+            if last_alert:
+                last_alert_ts = _dt.fromisoformat(last_alert.replace("Z", "+00:00"))
+                if (_dt.now(_tz.utc) - last_alert_ts).total_seconds() < 3600:
+                    return  # already alerted in last hour
+            _notify(
+                f"🚨 <b>DEAD-MAN ALERT</b>\nmarket_scan has not run for "
+                f"{age_min:.0f} minutes (last: {last}). Modal cron may be off-air."
+            )
+            set_system_state(conn, "last_dead_man_alert_at", _dt.now(_tz.utc).isoformat())
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  [dead-man-failed] {e}")
+
+
 # In-process flag so we only emit the empty-wallets warning to Telegram once
 # per container lifetime (otherwise the hourly cron spams the user).
 _PM_GUARD_WARNED = False
@@ -152,10 +212,16 @@ volumes = {"/app/data": data_volume}
     timeout=300,
 )
 def news_scan():
-    """Check for breaking news requiring immediate action."""
+    """Check for breaking news requiring immediate action.
+
+    Also serves as the dead-man check for market_scan (every 15min cadence
+    means we'll notice within 15min if market_scan stops firing).
+    """
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running news scan...")
+    _heartbeat("news_scan")
+    _dead_man_check(max_stale_minutes=120)
 
     news_base = "/app/.claude/skills/news-monitor/scripts"
     _run(f"{news_base}/news_aggregator.py", timeout=120)
@@ -192,6 +258,7 @@ def market_scan():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running market scan...")
+    _heartbeat("market_scan")
 
     scan = "/app/.claude/skills/market-scan/scripts"
     conf = "/app/.claude/skills/confluence-engine/scripts"
@@ -260,6 +327,7 @@ def opus_daily_brief():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running Opus 4.7 daily brief...")
+    _heartbeat("opus_daily_brief")
 
     news = "/app/.claude/skills/news-monitor/scripts"
     # Step 0: Free-tier data feeds (Workstream 2 Phase A). Cheap, no API cost.
@@ -285,6 +353,7 @@ def nightly_learning():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running nightly learning pass (manual)...")
+    _heartbeat("nightly_learning")
     _run("/app/lib/strategy_tuner.py", "--all", timeout=300)
     _run("/app/lib/backtester.py", "--promote-all", "--days", "90", timeout=1500)
     _notify(f"🌙 Nightly learning pass complete at {timestamp}")
@@ -303,6 +372,7 @@ def polymarket_scan():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Polymarket scan starting")
+    _heartbeat("polymarket_scan")
     if not _pm_guard_ok():
         print(f"[{timestamp}] Polymarket scan skipped — tracked_accounts empty")
         return
@@ -330,6 +400,7 @@ def daily_report():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Generating daily report...")
+    _heartbeat("daily_report")
 
     perf = "/app/.claude/skills/performance-report/scripts"
     imp  = "/app/.claude/skills/self-improve/scripts"
@@ -392,6 +463,7 @@ def weekly_review():
     os.chdir("/app")
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"[{timestamp}] Running weekly review...")
+    _heartbeat("weekly_review")
 
     perf = "/app/.claude/skills/performance-report/scripts"
     imp  = "/app/.claude/skills/self-improve/scripts"
@@ -405,6 +477,9 @@ def weekly_review():
     _run(f"{imp}/hypothesis_generator.py", "--auto-apply", timeout=600)
     # Newly proposed strategies sit at mode=backtest — evaluate them immediately
     _run("/app/lib/backtester.py", "--promote-all", "--days", "90", timeout=1800)
+    # P3: apply the promotion gate so qualifying strategies move backtest→paper
+    # automatically each week. Hurdles enforced in lib/strategy_promotion.py.
+    _run("/app/lib/strategy_promotion.py", "--apply", timeout=120)
 
     # Polymarket: weekly leaderboard refresh + wallet-graph clustering. Updates
     # config/polymarket_accounts.json::tracked_accounts.

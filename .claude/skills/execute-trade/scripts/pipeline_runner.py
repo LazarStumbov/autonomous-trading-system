@@ -94,8 +94,34 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
         print("[pipeline_runner] no alerts — nothing to do")
         return {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0, "failed_tier": 0}
 
+    # P4: order alerts by confluence score (high → low) so when per-strategy or
+    # global per-cycle caps fire, we keep the best alerts, not the first ones.
+    alerts = sorted(
+        alerts,
+        key=lambda a: float(a.get("confluence_score") or 0),
+        reverse=True,
+    )
+
     capital = _get_capital()
-    stats = {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0, "errors": 0, "failed_tier": 0}
+    stats = {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0,
+             "errors": 0, "failed_tier": 0, "skipped_caps": 0}
+
+    # P4: per-cycle caps — load from config/risk_params.json with sensible defaults.
+    # max_new_trades_per_cycle = global ceiling (default 2)
+    # max_new_trades_per_strategy_per_cycle = per-strategy ceiling (default 1)
+    # These force the funnel to pick winners instead of opening 4 trades on
+    # the same strategy in the same minute (the 2026-05-12 monoculture pattern).
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        risk_cfg_path = _Path(__file__).resolve().parents[4] / "config" / "risk_params.json"
+        risk_cfg = _json.loads(risk_cfg_path.read_text())
+        max_per_cycle = int(risk_cfg.get("market_trading", {}).get("max_new_trades_per_cycle", 2))
+        max_per_strategy = int(risk_cfg.get("market_trading", {}).get("max_new_trades_per_strategy_per_cycle", 1))
+    except Exception:
+        max_per_cycle, max_per_strategy = 2, 1
+    executed_this_cycle = 0
+    executed_by_strategy: dict[str, int] = {}
 
     for alert in alerts:
         entry = alert.get("entry_price")
@@ -124,6 +150,23 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
                 f"tier={tier} score={confluence} threshold={effective_min}"
             )
             stats["failed_tier"] += 1
+            continue
+
+        # P4: per-cycle caps. Block once we hit the global ceiling. Block any
+        # single strategy that has already executed its max in this cycle.
+        if executed_this_cycle >= max_per_cycle:
+            print(
+                f"[pipeline_runner] CAP_GLOBAL {symbol} {direction} "
+                f"executed={executed_this_cycle} >= max_per_cycle={max_per_cycle}"
+            )
+            stats["skipped_caps"] += 1
+            continue
+        if executed_by_strategy.get(strategy, 0) >= max_per_strategy:
+            print(
+                f"[pipeline_runner] CAP_STRATEGY {symbol} {direction} strategy={strategy} "
+                f"already executed {executed_by_strategy[strategy]}x this cycle"
+            )
+            stats["skipped_caps"] += 1
             continue
 
         # ── 1. Risk gate ──────────────────────────────────────────────────────
@@ -192,6 +235,8 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
                 f"R:R={rr} confluence={confluence}"
             )
             stats["executed"] += 1
+            executed_this_cycle += 1
+            executed_by_strategy[strategy] = executed_by_strategy.get(strategy, 0) + 1
             continue
 
         try:
@@ -204,6 +249,8 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
             )
             if status in ("EXECUTED", "DRY_RUN"):
                 stats["executed"] += 1
+                executed_this_cycle += 1
+                executed_by_strategy[strategy] = executed_by_strategy.get(strategy, 0) + 1
             else:
                 errs = exec_result.get("errors", [])
                 print(f"[pipeline_runner] exec errors: {errs}")

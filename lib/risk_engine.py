@@ -285,6 +285,33 @@ def check_circuit_breakers(db_path: str = None) -> dict:
     return {"halted": False, "verdict": RiskVerdict.PASS, "reason": "No circuit breakers active"}
 
 
+def _infer_asset_class(asset: str) -> str | None:
+    """Map a ticker symbol to a coarse asset_class slug for macro_blackout lookup.
+
+    Conservative — returns None on ambiguity so the macro gate fails open
+    rather than fails closed. The output strings match lib.macro_blackout's
+    _ASSET_CLASS_TO_BUCKET keys.
+    """
+    if not asset:
+        return None
+    s = asset.upper()
+    if ":USDT" in s or "/USDT" in s or s.endswith("USDT"):
+        return "crypto_perp"
+    if s in ("BTC", "ETH", "SOL", "DOGE", "XRP"):
+        return "crypto_perp"
+    if s in ("SPY", "QQQ", "NVDA", "AAPL", "MSFT", "TSLA"):
+        return "stock_equity"
+    if s in ("TLT", "IEF", "AGG"):
+        return "bond_etf"
+    if s in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD"):
+        return "forex_spot"
+    if s in ("SPX500", "NAS100", "US30", "GER40"):
+        return "cfd_index"
+    if s in ("XAUUSD", "XAGUSD", "USOIL", "UKOIL", "XPTUSD"):
+        return "cfd_commodity"
+    return None
+
+
 def check_trade(
     capital: float,
     asset: str,
@@ -363,6 +390,41 @@ def check_trade(
     }
     if not has_sl:
         failures.append("No stop loss set")
+
+    # 9. Macro blackout — reject new positions within ~15min of FOMC / CPI /
+    # NFP / ECB / etc. Feature-flagged via risk_params.market_trading.macro_blackout_enabled
+    # (default true). Asset-class is inferred from symbol via best-effort
+    # lookup; on inference failure the gate fails open (no block).
+    macro_enabled = config["market_trading"].get("macro_blackout_enabled", True)
+    if macro_enabled:
+        try:
+            from lib.macro_blackout import is_in_blackout, active_blackouts
+            asset_class = _infer_asset_class(asset)
+            if asset_class and is_in_blackout(asset_class):
+                windows = active_blackouts(asset_class)
+                reason = (
+                    f"macro_blackout: {asset_class} blocked during "
+                    f"{', '.join(w.get('event', '?') for w in windows[:2])}"
+                )
+                checks["macro_blackout"] = {
+                    "asset_class": asset_class,
+                    "active_windows": windows,
+                    "verdict": RiskVerdict.FAIL,
+                    "reason": reason,
+                }
+                failures.append(reason)
+            else:
+                checks["macro_blackout"] = {
+                    "asset_class": asset_class,
+                    "verdict": RiskVerdict.PASS,
+                    "reason": "no active macro blackout for this asset class",
+                }
+        except Exception as e:
+            # Calendar missing or import error — fail open. Log only.
+            checks["macro_blackout"] = {
+                "verdict": RiskVerdict.PASS,
+                "reason": f"check skipped (non-fatal): {e}",
+            }
 
     # Consolidated verdict
     overall = RiskVerdict.PASS if len(failures) == 0 else RiskVerdict.FAIL

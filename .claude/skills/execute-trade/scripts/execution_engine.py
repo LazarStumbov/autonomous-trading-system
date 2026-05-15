@@ -13,7 +13,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from lib.db import get_connection, init_db, log_trade, log_signal
 from lib.constants import Pillar, TradeStatus
-from lib.paper_engine import is_paper_mode, simulate_order
+from lib.paper_engine import is_paper_mode, simulate_order, broker_mode
 
 # OKX broker adapter — routed through the clean BrokerAdapter interface
 from lib.brokers.okx_adapter import get_exchange, OkxAdapter as _OkxAdapter
@@ -82,18 +82,20 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
         _log_to_db(order, result)
         return result
 
-    # ─── Paper-mode short circuit ─────────────────────────────────────────
-    # When PAPER_MODE=true, we never touch the exchange. Trades are
-    # simulated against the live public price feed, balance is tracked in
-    # system_state.paper_balance_usd, and position_monitor closes them when
-    # SL/TP is reached.
-    if is_paper_mode():
+    # ─── Broker dispatch (P1: BROKER_MODE single-point switch) ───────────
+    # synthetic → simulate_order against public price feed (legacy paper path)
+    # demo      → real OKX demo trading endpoint, virtual capital, real fills
+    # live      → real OKX, real money (gated by lib.live_readiness elsewhere)
+    mode = broker_mode()
+
+    if mode == "synthetic":
         sim = simulate_order(order)
         # Mirror simulated fields onto our result and DB-log it
         result["status"] = sim["status"]
         result["orders"] = sim["orders"]
         result["errors"] = sim.get("errors", [])
         result["paper"] = True
+        result["broker_mode"] = "synthetic"
         result["fill_price"] = sim.get("fill_price")
         result["slippage_pct"] = sim.get("slippage_pct")
         # Use the actual fill price for DB logging — that's where the trade
@@ -103,6 +105,23 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
         _log_to_db(order, result)
         return result
 
+    # mode == 'demo' or 'live'. OKX adapter handles the URL switching via the
+    # OKX_DEMO env var (already implemented at lib/brokers/okx_adapter.py:69).
+    # When BROKER_MODE=demo we force OKX_DEMO=true for this call regardless of
+    # what the env says — defensive coupling so we cannot accidentally fire a
+    # live order from a demo-tagged container.
+    if mode == "demo":
+        os.environ["OKX_DEMO"] = "true"
+    elif mode == "live":
+        # Live mode requires explicit live keys; OKX_DEMO must be false.
+        if os.environ.get("OKX_DEMO", "true").lower() != "false":
+            result["status"] = "REJECTED"
+            result["errors"].append(
+                "BROKER_MODE=live but OKX_DEMO is not explicitly set to 'false'"
+            )
+            return result
+
+    result["broker_mode"] = mode
     exchange = get_exchange()
 
     # Pre-flight: check balance
