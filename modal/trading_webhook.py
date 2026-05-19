@@ -180,14 +180,30 @@ image = (
 
 # Secrets (configure in Modal dashboard)
 # trading-broker-keys must include:
-#   PAPER_MODE=true|false               — internal paper trading switch
-#   PAPER_STARTING_BALANCE=500          — virtual capital, default 500 USD
-#   PAPER_PRICE_EXCHANGE=okx            — public exchange for prices
-#   OKX_API_KEY/SECRET_KEY/PASSPHRASE   — only required when PAPER_MODE=false
-#   OKX_DEMO=true|false                 — only matters when PAPER_MODE=false
+#   ─── Mode switches ───
+#   BROKER_MODE=demo|live|synthetic     — single dispatch flag (preferred)
+#   PAPER_MODE=true|false               — legacy fallback, used only if BROKER_MODE unset
+#   PAPER_STARTING_BALANCE=500          — virtual capital for synthetic mode
+#   PAPER_PRICE_EXCHANGE=okx            — public exchange for prices in synthetic mode
+#   ─── Per-asset-class broker overrides (optional; defaults in lib/brokers/router.py) ───
+#   CRYPTO_PERP_BROKER=okx              — default
+#   STOCKS_BROKER=alpaca                — default
+#   FOREX_BROKER=oanda                  — default
+#   BONDS_BROKER=alpaca                 — default (bond ETFs)
+#   ─── OKX (crypto perps) ───
+#   OKX_API_KEY/OKX_SECRET_KEY/OKX_PASSPHRASE  — demo or live; OKX_DEMO toggles
+#   OKX_DEMO=true|false                 — true = OKX demo trading endpoint
+#   ─── Alpaca (stocks + bond ETFs + crypto spot) ───
+#   ALPACA_KEY_ID/ALPACA_SECRET_KEY     — paper or live (separate keysets!)
+#   ALPACA_PAPER=true|false             — true = paper-api.alpaca.markets
+#   ALPACA_DATA_FEED=iex|sip            — 'iex' free, 'sip' paid (default iex)
+#   ─── OANDA (forex) ───
+#   OANDA_API_TOKEN                     — Personal Access Token from account portal
+#   OANDA_ACCOUNT_ID                    — e.g. 101-001-12345678-001
+#   OANDA_PRACTICE=true|false           — true = fxpractice endpoint
 secrets = [
-    modal.Secret.from_name("trading-broker-keys"),       # PAPER_MODE, OKX_*, PAPER_*
-    modal.Secret.from_name("trading-data-keys"),         # ALPHA_VANTAGE, FINNHUB, CMC, MARKETAUX
+    modal.Secret.from_name("trading-broker-keys"),       # All broker keys + MODE flags
+    modal.Secret.from_name("trading-data-keys"),         # ALPHA_VANTAGE, FINNHUB, CMC, MARKETAUX, FRED
     modal.Secret.from_name("trading-ai-keys"),           # ANTHROPIC_API_KEY (PERPLEXITY_API_KEY optional)
     modal.Secret.from_name("trading-notification-keys"), # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 ]

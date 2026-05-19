@@ -209,3 +209,12 @@ class OkxAdapter(BrokerAdapter):
             return {"ok": True, "balance_usd": bal, "demo": self._exchange.options.get("demo")}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def auth_test(self) -> tuple[bool, str]:
+        """Alias matching the AlpacaAdapter/OandaAdapter signature so the
+        router's auth_test_all() works consistently across all adapters."""
+        r = self.test_auth()
+        if r.get("ok"):
+            mode = "demo" if r.get("demo") else "live"
+            return True, f"okx {mode} ok, balance=${r.get('balance_usd', '?')}"
+        return False, r.get("error", "okx auth failed")

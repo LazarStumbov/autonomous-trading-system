@@ -19,42 +19,74 @@ Should show `running`. If not, check `modal app logs autonomous-trading-system` 
 
 ---
 
-## Step 2 — Generate OKX demo credentials (≈ 5 min, one-time)
+## Step 2 — Generate paper-broker credentials (≈ 15 min, one-time)
 
-1. Log in at <https://www.okx.com>, then go to **Demo Trading** (top-right menu).
-2. Create a virtual portfolio if you don't have one (gives you 10,000 USDT virtual).
-3. Open **API → Demo Trading API** (NOT the live keys page).
-4. Generate a new key set with `Read` + `Trade` permissions. Save:
-   - `OKX_API_KEY`
-   - `OKX_SECRET_KEY`
-   - `OKX_PASSPHRASE`
+You need **three** broker accounts — one per asset class. All free, all paper.
+Sign up from whichever country (Spain or Bulgaria both work fine for paper).
 
-> OKX demo trading runs at `https://www.okx.com/api/v5` with a special header.
-> `lib/brokers/okx_adapter.py:69` reads `OKX_DEMO` and sets the header
-> automatically — no code changes needed.
+### 2a — OKX Demo (crypto perpetuals)
+1. Log in at <https://www.okx.com> → **Demo Trading** (top-right menu).
+2. Create a virtual portfolio (gives you 10,000 USDT virtual).
+3. **API → Demo Trading API** (NOT live). Generate keys with `Read` + `Trade`.
+4. Save: `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`.
+
+### 2b — Alpaca Paper (stocks + bond ETFs + crypto spot)
+1. Sign up at <https://alpaca.markets> (free, no KYC required for paper).
+2. **Paper Trading → API Keys** (the URL says `paper-api`). Generate a new key.
+3. Default virtual capital: $100,000. You can reset/lower this in the dashboard.
+4. Save: `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` (NOT the same as live keys).
+5. Data feed: leave at `iex` (free, ~15-min delayed). Upgrade to `sip` later if needed.
+
+### 2c — OANDA fxTrade Practice (forex)
+1. Sign up at <https://www.oanda.com/account/login/?source=fxpractice> (free).
+2. Account portal → **Manage API Access** → Generate Personal Access Token.
+3. From the same page, copy the **Account ID** (looks like `101-001-12345678-001`).
+4. Save: `OANDA_API_TOKEN`, `OANDA_ACCOUNT_ID`.
+
+> All three adapters live in `lib/brokers/{okx,alpaca,oanda}_adapter.py`. The
+> per-asset-class router (`lib/brokers/router.py`) picks the right one based
+> on the symbol — you don't need to think about this at trade time.
 
 ---
 
 ## Step 3 — Add Modal secrets (≈ 3 min, one-time)
 
-Go to Modal dashboard → **Secrets** → edit `trading-broker-keys`. Add or update:
+Go to Modal dashboard → **Secrets** → edit `trading-broker-keys`. Add:
 
 ```
+# ─── Mode switches ───
 BROKER_MODE=demo
+PAPER_MODE=false                       # legacy fallback; explicit value is defensive
+
+# ─── OKX (crypto perps) ───
 OKX_DEMO=true
-OKX_API_KEY=<from step 2>
-OKX_SECRET_KEY=<from step 2>
-OKX_PASSPHRASE=<from step 2>
-PAPER_MODE=false        # IMPORTANT: must flip from true → false
+OKX_API_KEY=<from step 2a>
+OKX_SECRET_KEY=<from step 2a>
+OKX_PASSPHRASE=<from step 2a>
+
+# ─── Alpaca (stocks + bond ETFs + crypto spot) ───
+ALPACA_PAPER=true
+ALPACA_KEY_ID=<from step 2b>
+ALPACA_SECRET_KEY=<from step 2b>
+ALPACA_DATA_FEED=iex
+
+# ─── OANDA (forex) ───
+OANDA_PRACTICE=true
+OANDA_API_TOKEN=<from step 2c>
+OANDA_ACCOUNT_ID=<from step 2c>
 ```
 
-Why both `BROKER_MODE=demo` and `PAPER_MODE=false`: `broker_mode()` reads
-`BROKER_MODE` first; `PAPER_MODE` is a fallback that only matters if
-`BROKER_MODE` is unset. Setting both explicitly is defensive.
+Each adapter reads its own keys. The router picks which one to use per symbol.
 
-While you're there, confirm `trading-ai-keys` contains `ANTHROPIC_API_KEY`.
-If missing, paste it now — the PM specialist and daily synthesizer won't fire
-without it.
+While you're there, confirm `trading-ai-keys` contains `ANTHROPIC_API_KEY` —
+the PM specialist and daily synthesizer won't fire without it.
+
+**Verify creds before deploying:** locally,
+```bash
+python3 lib/brokers/router.py
+```
+That runs `auth_test()` on every configured adapter and reports OK/FAIL per
+broker. If any FAIL, fix that broker's keys before continuing.
 
 **Re-deploy after secret changes:**
 ```bash
@@ -82,22 +114,33 @@ Should show `last_cron_at = <recent>` and `last_cron_at_market_scan = <recent>`.
 
 ---
 
-## Step 5 — Validate first OKX demo trade (≈ next hourly cron tick)
+## Step 5 — Validate first real-broker trade (≈ next hourly cron tick)
 
 Wait for the next 00-minute UTC hour. Then:
 
 ```bash
 sqlite3 -header data/db/trading.db \
   "SELECT id, asset, direction, broker, entry_price, opened_at
-     FROM trades WHERE status='open' ORDER BY id DESC LIMIT 5;"
+     FROM trades WHERE status='open' ORDER BY id DESC LIMIT 10;"
 ```
 
-You're looking for `broker` values like `okx-demo` (or whatever the adapter
-stamps) instead of `paper`. If you see `paper`, `BROKER_MODE` didn't make it
-into the container — re-check Step 3 + deploy.
+You're looking for `broker` values like:
+- `okx_demo` — crypto perp trade (e.g. `BTC/USDT:USDT`)
+- `alpaca_demo` — stock trade (e.g. `SPY`, `NVDA`) or bond ETF (`TLT`)
+- `oanda_demo` — forex trade (e.g. `EURUSD`)
 
-Cross-check on OKX: log in to demo trading → Positions tab → confirm a real
-position exists with matching size.
+If you see `paper` after Step 3, the dispatch is still in synthetic mode —
+re-check `BROKER_MODE=demo` in the Modal secret + redeploy.
+
+**Cross-check on each broker:**
+- **OKX**: demo trading → Positions tab. Confirm matching position.
+- **Alpaca**: paper dashboard → Positions. Confirm matching shares.
+- **OANDA**: practice fxTrade → Open Positions. Confirm matching units.
+
+If you see `synthetic` in `broker` for an asset class that should have a real
+adapter, the router fell through (likely cause: that broker's `auth_test()`
+returned FAIL during startup — re-run `python3 lib/brokers/router.py` locally
+with the same env to diagnose).
 
 ---
 
@@ -149,7 +192,8 @@ The single field to watch is `flags.overall_ok`. When that's `true`, walk away.
 | `flags.cron_alive = false` after deploy | Modal cron status page; look for image-build errors |
 | `flags.brain_firing = false` after 24h | `trading-ai-keys` secret contains `ANTHROPIC_API_KEY` |
 | Telegram dead-man alert fires | Modal app dashboard → app logs for the affected cron |
-| Trades opening on `paper` instead of `okx-demo` | `BROKER_MODE` secret value + redeploy |
+| Trades opening on `paper` instead of `okx_demo`/`alpaca_demo`/`oanda_demo` | `BROKER_MODE=demo` secret value + redeploy |
+| Crypto trades work but stocks/forex go to `synthetic` | Run `python3 lib/brokers/router.py` locally — see which adapter's `auth_test()` fails, fix that broker's keys |
 | PM bets still appearing as `heuristic_paper` | Expected behaviour until `discover_wallets.py` (Sun 12:00 UTC) populates `tracked_accounts`. The PM guard short-circuits PM pipeline until then. |
 
 ---
@@ -169,8 +213,9 @@ The system is on track when, sampled at random hours:
 1. `flags.overall_ok = true`
 2. `agent_actions` accumulating ≥ 5 rows/day
 3. `last_cron_at_market_scan < 60 min` old
-4. At least 1 closed trade per 48h on `broker = 'okx-demo'`
-5. No `discovery_method = 'heuristic_paper'` rows in `polymarket_bets` opened after 2026-05-15
-6. MTD API spend < $250
+4. At least 1 closed trade per 48h on a real broker (`broker LIKE '%_demo'`)
+5. Trade ledger shows non-zero counts across **all three** broker labels (`okx_demo`, `alpaca_demo`, `oanda_demo`) — confirms the multi-asset router is doing its job
+6. No `discovery_method = 'heuristic_paper'` rows in `polymarket_bets` opened after 2026-05-15
+7. MTD API spend < $250
 
 Failing any of these blocks the live-money flip discussion.

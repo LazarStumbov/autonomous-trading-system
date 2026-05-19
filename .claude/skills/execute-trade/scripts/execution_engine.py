@@ -82,15 +82,23 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
         _log_to_db(order, result)
         return result
 
-    # ─── Broker dispatch (P1: BROKER_MODE single-point switch) ───────────
-    # synthetic → simulate_order against public price feed (legacy paper path)
-    # demo      → real OKX demo trading endpoint, virtual capital, real fills
-    # live      → real OKX, real money (gated by lib.live_readiness elsewhere)
+    # ─── Broker dispatch (P1 + multi-broker federation) ──────────────────
+    # Asset-class-aware routing:
+    #   crypto perps → OKX (legacy code path below, multi-tier TP)
+    #   stocks       → Alpaca (clean adapter path)
+    #   crypto spot  → Alpaca (clean adapter path)
+    #   bond ETFs    → Alpaca (clean adapter path)
+    #   forex        → OANDA (clean adapter path)
+    #   bonds future, CFDs → synthetic (no adapter yet)
+    #
+    # BROKER_MODE remains the global escape hatch:
+    #   synthetic → simulate_order (regardless of routed adapter)
+    #   demo/live → use the routed adapter; each adapter reads its own
+    #               paper/demo/live flag (OKX_DEMO, ALPACA_PAPER, OANDA_PRACTICE)
     mode = broker_mode()
 
     if mode == "synthetic":
         sim = simulate_order(order)
-        # Mirror simulated fields onto our result and DB-log it
         result["status"] = sim["status"]
         result["orders"] = sim["orders"]
         result["errors"] = sim.get("errors", [])
@@ -98,22 +106,44 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
         result["broker_mode"] = "synthetic"
         result["fill_price"] = sim.get("fill_price")
         result["slippage_pct"] = sim.get("slippage_pct")
-        # Use the actual fill price for DB logging — that's where the trade
-        # really opens, not the intended entry_price.
         if sim["status"] == "EXECUTED" and sim.get("fill_price"):
             order = {**order, "entry_price": sim["fill_price"]}
         _log_to_db(order, result)
         return result
 
-    # mode == 'demo' or 'live'. OKX adapter handles the URL switching via the
-    # OKX_DEMO env var (already implemented at lib/brokers/okx_adapter.py:69).
-    # When BROKER_MODE=demo we force OKX_DEMO=true for this call regardless of
-    # what the env says — defensive coupling so we cannot accidentally fire a
-    # live order from a demo-tagged container.
+    # mode in ('demo', 'live') → route by asset class
+    from lib.brokers.router import adapter_for_symbol
+    adapter, broker_name, asset_class = adapter_for_symbol(asset)
+    result["broker_mode"] = mode
+    result["broker"] = broker_name
+    result["asset_class"] = asset_class
+
+    if adapter is None:
+        # Router returned 'synthetic' — fall through to simulation. Bond
+        # futures and CFDs land here until those adapters are written.
+        print(f"[execution_engine] {asset} class={asset_class} has no real "
+              f"adapter — using synthetic simulation")
+        sim = simulate_order(order)
+        result["status"] = sim["status"]
+        result["orders"] = sim["orders"]
+        result["errors"] = sim.get("errors", [])
+        result["paper"] = True
+        result["fill_price"] = sim.get("fill_price")
+        result["slippage_pct"] = sim.get("slippage_pct")
+        if sim["status"] == "EXECUTED" and sim.get("fill_price"):
+            order = {**order, "entry_price": sim["fill_price"]}
+        _log_to_db(order, result)
+        return result
+
+    # Non-OKX adapters use the clean BrokerAdapter interface
+    if broker_name != "okx":
+        return _execute_via_adapter(adapter, broker_name, order, result)
+
+    # OKX-specific path below uses the legacy ccxt code (multi-tier TP support).
+    # Defensive coupling: BROKER_MODE=demo → force OKX_DEMO=true.
     if mode == "demo":
         os.environ["OKX_DEMO"] = "true"
     elif mode == "live":
-        # Live mode requires explicit live keys; OKX_DEMO must be false.
         if os.environ.get("OKX_DEMO", "true").lower() != "false":
             result["status"] = "REJECTED"
             result["errors"].append(
@@ -121,7 +151,6 @@ def execute_order(order: dict, dry_run: bool = False) -> dict:
             )
             return result
 
-    result["broker_mode"] = mode
     exchange = get_exchange()
 
     # Pre-flight: check balance
@@ -285,6 +314,108 @@ def _try_capture_screenshot(order: dict) -> str | None:
         return None
 
 
+def _resolve_broker_label(order: dict, result: dict) -> str:
+    """Single source of truth for the trades.broker DB field.
+
+    Order of precedence:
+      1. Synthetic path (paper=True) → 'paper'
+      2. Real adapter path → '<broker>_demo' or '<broker>_live' from result.broker
+      3. OKX legacy path → 'okx_demo' if mode=demo else 'okx'
+      4. Fallback → 'paper' (defensive)
+    """
+    if result.get("paper"):
+        return "paper"
+    broker = (order.get("_broker_name") or result.get("broker") or "").lower()
+    mode = (result.get("broker_mode") or "").lower()
+    if broker:
+        suffix = "_demo" if mode == "demo" else ("_live" if mode == "live" else "")
+        return f"{broker}{suffix}"
+    # Legacy OKX-only fallback (no adapter path was taken)
+    if mode == "demo":
+        return "okx_demo"
+    if mode == "live":
+        return "okx"
+    return "paper"
+
+
+def _execute_via_adapter(adapter, broker_name: str, order: dict, result: dict) -> dict:
+    """Place an order through a clean BrokerAdapter (alpaca / oanda / future).
+
+    The legacy OKX path uses raw ccxt with venue-specific param maps for
+    multi-tier TP. Clean-adapter brokers (Alpaca, OANDA) get the simpler
+    interface: market entry + optional SL/TP. Multi-tier TP for those
+    venues is added later — most stocks/forex strategies don't need it.
+    """
+    asset = order["asset"]
+    direction = order["direction"]
+    side = "buy" if direction == "long" else "sell"
+    size = order["position_size"]
+    sl = order["stop_loss"]
+    tp = order["take_profit"]
+
+    # Pre-flight: balance check (skip for synthetic since adapter handles it,
+    # but adapters return real balances we can sanity-check against)
+    try:
+        balance_usd = adapter.fetch_balance_usd()
+        margin_needed = order["margin_required_usd"]
+        if balance_usd < margin_needed:
+            result["status"] = "REJECTED"
+            result["errors"].append(
+                f"{broker_name}: insufficient balance ${balance_usd:.2f} < need ${margin_needed:.2f}"
+            )
+            _log_to_db(order, result)
+            return result
+    except Exception as e:
+        print(f"[execution_engine] {broker_name} balance check failed (non-fatal): {e}")
+
+    # Session check — Alpaca equities only trade RTH; OANDA forex closes weekends
+    try:
+        if hasattr(adapter, "is_session_open") and not adapter.is_session_open():
+            result["status"] = "REJECTED"
+            result["errors"].append(f"{broker_name}: market session closed for {asset}")
+            _log_to_db(order, result)
+            return result
+    except Exception:
+        pass
+
+    try:
+        order_result = adapter.place_market_order(
+            symbol=asset,
+            side=side,
+            qty=size,
+            stop_loss=sl,
+            take_profit=tp,
+        )
+    except Exception as e:
+        result["status"] = "ERROR"
+        result["errors"].append(f"{broker_name} place_market_order exception: {e}")
+        _log_to_db(order, result)
+        return result
+
+    if not order_result.ok:
+        result["status"] = "ERROR"
+        result["errors"].append(f"{broker_name}: {order_result.error or 'unknown'}")
+        _log_to_db(order, result)
+        return result
+
+    # Success: stamp the result with the entry order info. Fill price /
+    # slippage will be reconciled by the next position_monitor pass via
+    # adapter.fetch_positions().
+    result["status"] = "EXECUTED"
+    result["orders"] = {
+        "entry": {
+            "id": order_result.order_id,
+            "status": "submitted",
+            "filled": 0,
+            "avg_price": order["entry_price"],
+        }
+    }
+    # Stamp broker name on the trade row so post-mortems can split by venue
+    order = {**order, "_broker_name": broker_name}
+    _log_to_db(order, result)
+    return result
+
+
 def _log_to_db(order: dict, result: dict):
     """Log the trade attempt to the database."""
     try:
@@ -309,10 +440,7 @@ def _log_to_db(order: dict, result: dict):
             reasoning=order.get("reasoning", ""),
             risk_check_result=result["status"],
             opened_at=datetime.now(timezone.utc).isoformat(),
-            broker=(
-                "paper" if result.get("paper")
-                else ("okx_demo" if result.get("dry_run") else "okx")
-            ),
+            broker=_resolve_broker_label(order, result),
         )
 
         result["trade_id"] = trade_id
