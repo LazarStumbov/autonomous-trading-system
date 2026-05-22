@@ -40,46 +40,70 @@ from lib.brokers.base import BrokerAdapter, Quote, Position, OrderResult
 
 
 def _env(key: str, fallback: str = "") -> str:
-    """Load from environment, supporting dotenv files."""
-    val = os.environ.get(key, fallback)
+    """Load from environment, supporting dotenv files.
+
+    Bug fix 2026-05: the previous version did
+        val = os.environ.get(key, fallback)
+        if not val: ...
+    which short-circuited when fallback was truthy (e.g. 'global'), so the
+    .env file was never consulted. Now we explicitly use an empty default
+    for os.environ and only apply the caller's fallback at the very end.
+    """
+    val = os.environ.get(key, "")
     if not val:
         try:
             from dotenv import dotenv_values  # type: ignore
             env = dotenv_values(os.path.join(PROJECT_ROOT, ".env"))
-            val = env.get(key, fallback)
+            val = env.get(key, "") or ""
         except Exception:
             pass
-    return val
+    return val or fallback
 
 
-def get_exchange(demo: Optional[bool] = None) -> "ccxt.okx":  # type: ignore
-    """Return an authenticated ccxt.okx instance.
+def get_exchange(demo: Optional[bool] = None):  # type: ignore
+    """Return an authenticated ccxt OKX instance.
 
-    demo=True  → OKX paper trading (virtual funds, same API endpoint)
+    demo=True  → OKX paper trading (virtual funds, x-simulated-trading header)
     demo=None  → reads OKX_DEMO env var (defaults to True for safety)
-    demo=False → live trading (REAL MONEY — only set after paper window done)
+    demo=False → live trading (REAL MONEY — only after paper window passes)
+
+    OKX has two ccxt variants:
+      - ccxt.okx     → global okx.com (default)
+      - ccxt.myokx   → EU subsidiary (my.okx.com), MiCA-licensed for EEA users
+
+    EU accounts have keys registered against the EU entity ONLY. Calling
+    ccxt.okx with EU keys returns 50119 "API key doesn't exist". Set
+    OKX_REGION=eu to route through ccxt.myokx instead. Default is 'global'.
     """
     import ccxt  # type: ignore
 
     api_key = _env("OKX_API_KEY")
     secret = _env("OKX_SECRET_KEY")
     passphrase = _env("OKX_PASSPHRASE")
+    region = _env("OKX_REGION", "global").lower().strip()
 
     if demo is None:
         demo = _env("OKX_DEMO", "true").lower().strip() == "true"
 
-    exchange = ccxt.okx(
+    exchange_cls = ccxt.myokx if region in ("eu", "eea", "myokx") else ccxt.okx
+
+    exchange = exchange_cls(
         {
             "apiKey": api_key,
             "secret": secret,
             "password": passphrase,  # OKX calls it 'password' in ccxt
             "options": {
                 "defaultType": "swap",  # perpetual swaps by default
-                "demo": demo,           # True = paper trading / demo account
             },
             "enableRateLimit": True,
         }
     )
+    # OKX demo trading uses the x-simulated-trading: 1 header. ccxt sets it
+    # via set_sandbox_mode(True). The previous code set options.demo, which
+    # ccxt does NOT read — every request hit the live endpoint and 50119'd
+    # demo keys.
+    if demo:
+        exchange.set_sandbox_mode(True)
     return exchange
 
 
@@ -203,10 +227,16 @@ class OkxAdapter(BrokerAdapter):
     # ── Auth test ─────────────────────────────────────────────────────────────
 
     def test_auth(self) -> dict:
-        """Smoke-test API credentials. Returns {'ok': True/False, 'balance': ...}"""
+        """Smoke-test API credentials. Returns {'ok': True/False, 'balance': ...}.
+
+        `demo` flag is read from the sandbox header (set by ccxt.set_sandbox_mode),
+        not from `options.demo` (which ccxt does not interpret).
+        """
         try:
             bal = self.fetch_balance_usd()
-            return {"ok": True, "balance_usd": bal, "demo": self._exchange.options.get("demo")}
+            is_demo = bool(getattr(self._exchange, "headers", {}).get("x-simulated-trading"))
+            return {"ok": True, "balance_usd": bal, "demo": is_demo,
+                    "venue": type(self._exchange).__name__}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -216,5 +246,6 @@ class OkxAdapter(BrokerAdapter):
         r = self.test_auth()
         if r.get("ok"):
             mode = "demo" if r.get("demo") else "live"
-            return True, f"okx {mode} ok, balance=${r.get('balance_usd', '?')}"
+            venue = r.get("venue", "okx")
+            return True, f"{venue} {mode} ok, balance=${r.get('balance_usd', '?')}"
         return False, r.get("error", "okx auth failed")

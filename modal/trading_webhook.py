@@ -192,7 +192,9 @@ image = (
 #   BONDS_BROKER=alpaca                 — default (bond ETFs)
 #   ─── OKX (crypto perps) ───
 #   OKX_API_KEY/OKX_SECRET_KEY/OKX_PASSPHRASE  — demo or live; OKX_DEMO toggles
-#   OKX_DEMO=true|false                 — true = OKX demo trading endpoint
+#   OKX_DEMO=true|false                 — true = ccxt.set_sandbox_mode(True)
+#   OKX_REGION=global|eu                — 'eu' = ccxt.myokx (my.okx.com); MiCA
+#                                          EU users MUST set 'eu' or auth 50119s.
 #   ─── Alpaca (stocks + bond ETFs + crypto spot) ───
 #   ALPACA_KEY_ID/ALPACA_SECRET_KEY     — paper or live (separate keysets!)
 #   ALPACA_PAPER=true|false             — true = paper-api.alpaca.markets

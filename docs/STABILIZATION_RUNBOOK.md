@@ -26,9 +26,10 @@ Sign up from whichever country (Spain or Bulgaria both work fine for paper).
 
 ### 2a — OKX Demo (crypto perpetuals)
 1. Log in at <https://www.okx.com> → **Demo Trading** (top-right menu).
-2. Create a virtual portfolio (gives you 10,000 USDT virtual).
+2. Create a virtual portfolio (gives you 10,000 USDT virtual; you may need to click "Get test USDT" once).
 3. **API → Demo Trading API** (NOT live). Generate keys with `Read` + `Trade`.
 4. Save: `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`.
+5. **EU/EEA users**: OKX operates under a separate MiCA-licensed entity for European clients. Your keys are registered against `my.okx.com`, NOT the global `okx.com`. The adapter handles this via `OKX_REGION=eu` (set in Step 3). If you forget this, auth fails with `50119: API key doesn't exist` even though the keys are valid.
 
 ### 2b — Alpaca Paper (stocks + bond ETFs + crypto spot)
 1. Sign up at <https://alpaca.markets> (free, no KYC required for paper).
@@ -60,6 +61,7 @@ PAPER_MODE=false                       # legacy fallback; explicit value is defe
 
 # ─── OKX (crypto perps) ───
 OKX_DEMO=true
+OKX_REGION=eu                          # EU/EEA users — 'global' otherwise. WRONG region → 50119
 OKX_API_KEY=<from step 2a>
 OKX_SECRET_KEY=<from step 2a>
 OKX_PASSPHRASE=<from step 2a>
