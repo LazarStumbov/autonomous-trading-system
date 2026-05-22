@@ -121,9 +121,13 @@ def main() -> int:
             "original_output": resp.parsed,
             "source_inputs": ctx,
         }, default=str)[:60_000]
+        # Upgraded routine→critical (Opus 4.7). Tradeoff noted: using the
+        # same model family for synthesizer + critic reduces adversarial
+        # diversity (different architectures catch different mistakes). User
+        # prefers Opus quality on financial reviews — accepting the tradeoff.
         critic_resp = llm_brain.call(
             job="brain_daily_synthesis_critic",
-            tier="routine",
+            tier="critical",
             system=critic_system,
             user=critic_payload,
             max_tokens=1000,

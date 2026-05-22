@@ -120,9 +120,12 @@ def _safe_json_load(s):
 def _veto_via_brain(bet: dict) -> dict:
     system = llm_brain.load_prompt("_preamble") + "\n\n" + llm_brain.load_prompt("polymarket_specialist")
     user = _build_user_payload(bet)
+    # Upgraded routine→critical (Opus 4.7) for better narrative quality on
+    # PM bet vetoes. Cost impact small: ~1-5 PM candidates per cron tick at
+    # ~$0.005-$0.02 per call (Opus with prompt cache).
     resp = llm_brain.call(
         job="brain_pm_sanity_check",
-        tier="routine",
+        tier="critical",
         system=system,
         user=user,
         max_tokens=400,

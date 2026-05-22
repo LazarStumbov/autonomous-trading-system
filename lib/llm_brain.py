@@ -194,14 +194,21 @@ def call(
         else:
             system_block = system
 
-        resp = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_block,
-            messages=[{"role": "user", "content": user}],
-            timeout=timeout,
-        )
+        # Build kwargs — Opus 4.7+ deprecates the `temperature` parameter
+        # (the API errors with `temperature is deprecated for this model`).
+        # Sonnet 4.6 and older still accept it. Pass it only when supported
+        # so we don't have to maintain a forked model list.
+        create_kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system_block,
+            "messages": [{"role": "user", "content": user}],
+            "timeout": timeout,
+        }
+        if not model.startswith("claude-opus-4-7"):
+            create_kwargs["temperature"] = temperature
+
+        resp = client.messages.create(**create_kwargs)
         elapsed = time.time() - started
 
         # Extract text + token usage
