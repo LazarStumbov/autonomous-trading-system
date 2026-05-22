@@ -32,6 +32,20 @@ import urllib.request
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
+def _env(key: str, default: str = "") -> str:
+    """Read env var, fall back to .env at PROJECT_ROOT. Truthy default isn't
+    short-circuited (the OKX adapter had a bug where it was — same pattern fixed)."""
+    v = os.environ.get(key, "")
+    if not v:
+        try:
+            from dotenv import dotenv_values  # type: ignore
+            env = dotenv_values(os.path.join(PROJECT_ROOT, ".env"))
+            v = env.get(key, "") or ""
+        except Exception:
+            pass
+    return v or default
+
+
 SERIES = {
     "DGS10": "10y treasury yield",
     "DGS2": "2y treasury yield",
@@ -105,7 +119,7 @@ def _regime_from_series(payload: dict) -> dict:
 
 
 def main() -> int:
-    api_key = os.environ.get("FRED_API_KEY", "").strip()
+    api_key = _env("FRED_API_KEY").strip()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out_dir = Path(PROJECT_ROOT) / "data" / "signals" / today
     out_dir.mkdir(parents=True, exist_ok=True)
