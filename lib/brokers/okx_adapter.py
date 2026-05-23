@@ -136,10 +136,35 @@ class OkxAdapter(BrokerAdapter):
     # ── Account ──────────────────────────────────────────────────────────────
 
     def fetch_balance_usd(self) -> float:
-        """Return USDT balance (total equity in the trading account)."""
+        """Return total trading-account equity in USD.
+
+        Resolution order:
+          1. OKX unified account: `info.data[0].totalEq` is the USD-equivalent
+             of ALL assets (BTC + USDC + USD + EUR + ...) at current marks.
+             This is what OKX itself uses to size positions, so it's the
+             right field for risk-engine bankroll calculations.
+          2. Plain USDT balance: for classic non-unified swap accounts that
+             hold only USDT.
+          3. 0 — safe default; risk_engine will refuse to size trades.
+
+        Note: the old code did `bal.get("USDT") or bal.get("total", {})` which
+        returned the whole `total` dict (a Mapping, not a number) when USDT
+        was absent, and float() silently turned that into 0. This patch is
+        why a $159k virtual account was being read as $0.
+        """
         bal = self._exchange.fetch_balance({"type": "swap"})
-        # ccxt normalizes balance under 'USDT' key
-        usdt = bal.get("USDT") or bal.get("total", {})
+        # Path 1: unified-account totalEq (preferred for OKX)
+        try:
+            info = bal.get("info") or {}
+            data = info.get("data") or []
+            if data and isinstance(data, list):
+                total_eq = data[0].get("totalEq")
+                if total_eq not in (None, "", "0"):
+                    return float(total_eq)
+        except (KeyError, ValueError, TypeError):
+            pass
+        # Path 2: plain USDT
+        usdt = bal.get("USDT")
         if isinstance(usdt, dict):
             return float(usdt.get("total") or 0)
         return float(usdt or 0)
