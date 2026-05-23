@@ -140,12 +140,23 @@ def _numeric_summary(metrics: dict, trades: list[dict], strategies: list[dict]) 
 
 
 def _opus_narrative(metrics: dict, trades: list[dict], by_strat: dict) -> tuple[str, dict]:
-    """Returns (markdown_text, parsed_json_tail)."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    """Returns (markdown_text, parsed_json_tail).
+
+    Routed through lib.llm_brain so this call is now:
+      - Cost-tracked (api_costs table)
+      - Subject to the monthly budget cap
+      - Prompt-cached on the system block
+      - Logged to agent_actions for audit
+
+    Downgraded Opus 4.7 → Sonnet 4.6 ('routine' tier) per the cost-control
+    plan: this is an informational narrative that doesn't gate any trades.
+    Sonnet narrative quality is fine for weekly post-mortems and the call
+    drops from ~$0.10 to ~$0.02.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         return "", {}
     try:
-        import anthropic  # type: ignore
+        from lib import llm_brain  # type: ignore
     except ImportError:
         return "", {}
 
@@ -169,19 +180,19 @@ def _opus_narrative(metrics: dict, trades: list[dict], by_strat: dict) -> tuple[
         f"```json\n{json.dumps({'overall': metrics.get('overall', {}), 'by_strategy': by_strat, 'trades': compact_trades}, default=str, indent=2)[:50000]}\n```"
     )
 
-    client = anthropic.Anthropic(api_key=api_key)
-    try:
-        resp = client.messages.create(
-            model=OPUS_MODEL,
-            max_tokens=WEEKLY_OUTPUT_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_block}],
-        )
-    except Exception as e:
-        print(f"[weekly] Opus narrative call failed: {e}")
+    resp = llm_brain.call(
+        job="weekly_review_narrative",
+        tier="routine",
+        system=SYSTEM_PROMPT,
+        user=user_block,
+        max_tokens=WEEKLY_OUTPUT_TOKENS,
+        parse_json=False,  # narrative is markdown with optional JSON tail
+    )
+    if not resp.ok:
+        print(f"[weekly] narrative call failed: {resp.error}")
         return "", {}
 
-    text = "".join(getattr(b, "text", "") for b in resp.content).strip()
+    text = resp.text.strip()
 
     parsed = {}
     matches = JSON_TAIL_RE.findall(text)
@@ -189,7 +200,7 @@ def _opus_narrative(metrics: dict, trades: list[dict], by_strat: dict) -> tuple[
         try:
             parsed = json.loads(matches[-1])
         except json.JSONDecodeError as e:
-            print(f"[weekly] failed to parse Opus JSON tail: {e}")
+            print(f"[weekly] failed to parse JSON tail: {e}")
 
     return text, parsed
 

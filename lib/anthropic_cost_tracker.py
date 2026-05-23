@@ -53,6 +53,7 @@ ALLOWLIST_AFTER_CAP = {
     "opus_daily_brief",
     "brain_pm_sanity_check",   # kills Aston Villa pattern — never skip
     "brain_news_shock",        # urgent close decisions on macro events
+    "brain_daily_synthesis",   # the day-end strategic playbook; survives budget cap
 }
 
 DEFAULT_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_USD_CAP", "250"))

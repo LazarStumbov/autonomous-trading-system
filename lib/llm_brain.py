@@ -45,6 +45,7 @@ from lib.db import get_connection  # noqa: E402
 MODEL_CRITICAL = "claude-opus-4-7"
 MODEL_ROUTINE = "claude-sonnet-4-6"
 MODEL_BULK = "claude-sonnet-4-6"  # routed via Batch API in brain.bulk()
+MODEL_LIGHT = "claude-haiku-4-5"   # cheap tier for status updates, summaries, heartbeats
 
 
 @dataclass
@@ -81,9 +82,19 @@ def _client() -> "anthropic.Anthropic":  # type: ignore
 
 
 def _resolve_model(tier: str) -> str:
+    """Tier → concrete model ID.
+
+    Tiers:
+      critical  → Opus 4.7    : decisions that gate real trades, deep market analysis
+      routine   → Sonnet 4.6  : adversarial critique, weekly narratives, hypothesis generation
+      light     → Haiku 4.5   : status updates, heartbeat summaries, single-line outputs
+      bulk      → Sonnet 4.6  : same model as routine but intended for Batch API (50% off, 24h SLA)
+    Unknown tiers fall back to routine.
+    """
     return {
         "critical": MODEL_CRITICAL,
         "routine": MODEL_ROUTINE,
+        "light": MODEL_LIGHT,
         "bulk": MODEL_BULK,
     }.get(tier, MODEL_ROUTINE)
 

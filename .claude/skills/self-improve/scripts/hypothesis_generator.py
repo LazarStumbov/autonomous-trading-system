@@ -176,17 +176,23 @@ def _heuristic_tweak(strategy_row: dict, perf: dict) -> dict | None:
 
 # ── Optional LLM proposer (Anthropic) ────────────────────────────────────────
 def _llm_propose(perf_rows: list[dict], bounds_by_id: dict) -> list[dict]:
-    """Ask Claude to propose hypotheses. Returns [] if API unavailable."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    """Ask Claude to propose hypotheses. Returns [] if API unavailable.
+
+    Routed through lib.llm_brain (routine tier = Sonnet 4.6) per the
+    cost-control plan. Was a direct anthropic.Anthropic call on
+    claude-sonnet-4-5 that bypassed:
+      - the api_costs ledger (cost was invisible)
+      - the monthly budget cap
+      - prompt caching on the stable system block
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         return []
     try:
-        import anthropic  # type: ignore
+        from lib import llm_brain  # type: ignore
     except ImportError:
         return []
 
-    client = anthropic.Anthropic(api_key=api_key)
-    prompt = (
+    system_prompt = (
         "You are a quantitative trading strategy tuner. Propose 1-3 parameter "
         "tweaks for underperforming strategies and 0-1 new_variant ideas. "
         "Each tweak must stay within safe_bounds. Respond with STRICT JSON: "
@@ -197,23 +203,31 @@ def _llm_propose(perf_rows: list[dict], bounds_by_id: dict) -> list[dict]:
         {"strategies": perf_rows, "safe_bounds": bounds_by_id},
         default=str,
     )
-    try:
-        resp = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=2000,
-            system=prompt,
-            messages=[{"role": "user", "content": user_block}],
-        )
-        text = "".join(getattr(b, "text", "") for b in resp.content)
+
+    resp = llm_brain.call(
+        job="hypothesis_generator",
+        tier="routine",
+        system=system_prompt,
+        user=user_block,
+        max_tokens=2000,
+    )
+    if not resp.ok:
+        print(f"[hypothesis_generator] LLM call failed: {resp.error}")
+        return []
+    # parse_json=True (default) already extracted the JSON object if it was
+    # well-formed. Prefer that; fall back to greedy-brace scan if needed.
+    data = resp.parsed
+    if not data:
+        text = resp.text or ""
         start, end = text.find("{"), text.rfind("}")
         if start == -1 or end == -1:
             return []
-        data = json.loads(text[start : end + 1])
-        out = data.get("hypotheses", [])
-        return out if isinstance(out, list) else []
-    except Exception as e:
-        print(f"[hypothesis_generator] LLM call failed: {e}")
-        return []
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return []
+    out = (data or {}).get("hypotheses", [])
+    return out if isinstance(out, list) else []
 
 
 # ── Applying a hypothesis: register + log ────────────────────────────────────

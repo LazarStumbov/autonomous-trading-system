@@ -121,13 +121,14 @@ def main() -> int:
             "original_output": resp.parsed,
             "source_inputs": ctx,
         }, default=str)[:60_000]
-        # Upgraded routine→critical (Opus 4.7). Tradeoff noted: using the
-        # same model family for synthesizer + critic reduces adversarial
-        # diversity (different architectures catch different mistakes). User
-        # prefers Opus quality on financial reviews — accepting the tradeoff.
+        # Reverted critic critical→routine (Sonnet 4.6) per the cost-control
+        # plan. Rationale: using the SAME model family for synthesizer + critic
+        # destroys adversarial diversity — different architectures catch
+        # different mistakes. Sonnet red-teaming Opus's output is the correct
+        # design AND it's ~70% cheaper per critic call.
         critic_resp = llm_brain.call(
             job="brain_daily_synthesis_critic",
-            tier="critical",
+            tier="routine",
             system=critic_system,
             user=critic_payload,
             max_tokens=1000,

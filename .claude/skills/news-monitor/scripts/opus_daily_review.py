@@ -188,82 +188,50 @@ def _stub_response(reason: str) -> str:
 
 
 def _call_opus(input_blob: dict) -> tuple[str, dict]:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    """Route the daily brief through lib.llm_brain so it gets the same
+    central treatment as the other agent calls: prompt caching, schema-parse
+    fallback, action logging, cost tracking, and budget allow-list.
+
+    Tier stays 'critical' (Opus 4.7) per the cost-control plan: this is
+    market research + regime analysis, not a status update.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         return _stub_response("ANTHROPIC_API_KEY not set"), {"model": None, "stubbed": True}
-
-    # Cost gate (D6.6): allowlisted as opus_daily_brief, so this still runs
-    # even when the monthly cap is hit — but cost is logged either way.
     try:
-        from lib.anthropic_cost_tracker import should_allow, track_call  # type: ignore
-        ok, reason = should_allow("opus_daily_brief")
-        if not ok:
-            return _stub_response(f"cost gate: {reason}"), {"model": None, "stubbed": True, "cost_gate": reason}
-    except Exception:
-        track_call = None  # type: ignore
+        from lib import llm_brain  # type: ignore
+    except ImportError as e:
+        return _stub_response(f"llm_brain unavailable: {e}"), {"model": None, "stubbed": True}
 
-    try:
-        import anthropic  # type: ignore
-    except ImportError:
-        return _stub_response("anthropic SDK missing"), {"model": None, "stubbed": True}
-
-    client = anthropic.Anthropic(api_key=api_key)
     user_content = (
         "Here is today's input data as JSON. Produce the daily brief per "
         "the system instructions.\n\n"
         f"```json\n{json.dumps(input_blob, default=str, indent=2)[:60000]}\n```"
     )
 
-    try:
-        # D6.2: prompt caching on the stable system prompt (~5min TTL).
-        # System prompt + playbook context = stable; today's data = volatile.
-        resp = client.messages.create(
-            model=OPUS_MODEL,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            system=[
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_content}],
+    resp = llm_brain.call(
+        job="opus_daily_brief",
+        tier="critical",
+        system=SYSTEM_PROMPT,
+        user=user_content,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        parse_json=False,  # the brief is markdown, not JSON
+    )
+
+    if not resp.ok:
+        return (
+            _stub_response(f"Opus call failed: {resp.error or 'unknown'}"),
+            {"model": resp.model or OPUS_MODEL, "stubbed": True, "error": resp.error},
         )
-    except Exception as e:
-        print(f"[opus_daily_review] Opus call failed: {e}")
-        return _stub_response(f"Opus call failed: {e}"), {"model": OPUS_MODEL, "stubbed": True, "error": str(e)}
 
-    text = "".join(getattr(b, "text", "") for b in resp.content)
-    usage = getattr(resp, "usage", None)
-    in_tok = getattr(usage, "input_tokens", 0) if usage else 0
-    cached_tok = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
-    out_tok = getattr(usage, "output_tokens", 0) if usage else 0
-
-    if track_call is not None:
-        try:
-            usd = track_call(
-                job="opus_daily_brief",
-                model=OPUS_MODEL,
-                input_tokens=in_tok - cached_tok,
-                cached_input_tokens=cached_tok,
-                output_tokens=out_tok,
-            )
-        except Exception as e:
-            usd = None
-            print(f"[opus_daily_review] cost track failed: {e}")
-    else:
-        usd = None
-
-    meta = {
-        "model": getattr(resp, "model", OPUS_MODEL),
-        "stop_reason": getattr(resp, "stop_reason", None),
-        "input_tokens": in_tok,
-        "cached_input_tokens": cached_tok,
-        "output_tokens": out_tok,
-        "usd_cost": usd,
+    return resp.text.strip(), {
+        "model": resp.model,
+        "stop_reason": None,
+        "input_tokens": resp.input_tokens,
+        "cached_input_tokens": resp.cached_input_tokens,
+        "output_tokens": resp.output_tokens,
+        "usd_cost": resp.usd_cost,
         "stubbed": False,
     }
-    return text.strip(), meta
 
 
 def run() -> dict:
