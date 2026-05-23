@@ -322,6 +322,13 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE polymarket_bets ADD COLUMN discovery_method TEXT")
         if not _column_exists(conn, "polymarket_bets", "discovery_evidence"):
             conn.execute("ALTER TABLE polymarket_bets ADD COLUMN discovery_evidence TEXT")
+        # `initial_sl` was added to trades SCHEMA later; existing legacy DBs
+        # (including Modal's persistent volume) don't have it. Without this
+        # ALTER, every execute_order's _log_to_db raised OperationalError
+        # and the trade vanished without a row. This was the second silent
+        # failure layered behind get_balance returning $0.
+        if not _column_exists(conn, "trades", "initial_sl"):
+            conn.execute("ALTER TABLE trades ADD COLUMN initial_sl REAL")
         conn.commit()
     except sqlite3.Error:
         pass
