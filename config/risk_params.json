@@ -66,8 +66,9 @@
     }
   },
   "capital": {
-    "initial_market_usd": 250,
-    "initial_polymarket_usd": 250,
+    "_comment": "Paper-test capital. OKX demo holds ~$159k and Alpaca paper ~$100k of virtual equity, but the system sizes against THIS number, not the broker balance — keeps paper risk controllable while broker provides realistic fills. Live-money flip will swap this for actual capital later.",
+    "initial_market_usd": 5000,
+    "initial_polymarket_usd": 500,
     "rebalance_threshold_pct": 20
   },
   "paper_mode_overrides": {
