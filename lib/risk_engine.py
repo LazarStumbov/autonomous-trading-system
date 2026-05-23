@@ -162,6 +162,13 @@ def check_leverage(
 def check_portfolio_exposure(capital: float, new_position_value: float, db_path: str = None) -> dict:
     """Check if adding a new position would exceed portfolio exposure limits.
 
+    The caller passes `new_position_value` as MARGIN (notional/leverage) since
+    the 2026-05-23 fix. Existing open trades are also reduced by their stored
+    leverage so we sum margin like-for-like rather than mixing notional+margin.
+    Crypto trades pre-fix had leverage=3 stored, so the math still works.
+    Pre-leverage rows (synthetic CFD without a leverage column entry) divide
+    by 1 = no change.
+
     Returns:
         Dict with current_exposure_pct, new_exposure_pct, verdict
     """
@@ -172,9 +179,12 @@ def check_portfolio_exposure(capital: float, new_position_value: float, db_path:
     open_trades = get_open_trades(conn)
     conn.close()
 
-    current_exposure = sum(
-        t.get("quantity", 0) * t.get("entry_price", 0) for t in open_trades
-    )
+    current_exposure = 0.0
+    for t in open_trades:
+        qty = t.get("quantity") or 0
+        px = t.get("entry_price") or 0
+        lev = max(1, int(t.get("leverage") or 1))
+        current_exposure += (qty * px) / lev
     new_total = current_exposure + new_position_value
     exposure_pct = (new_total / capital) * 100 if capital > 0 else 100
 
