@@ -369,9 +369,22 @@ def check_trade(
     if checks["leverage"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["leverage"]["reason"])
 
-    # 6. Portfolio exposure (use margin required, not notional)
+    # 6. Portfolio exposure — margin required, not gross notional
+    #
+    # The OLD code treated notional as exposure ("but exposure tracks notional
+    # risk"). That model breaks the moment leverage > 1: a $100k EUR/USD
+    # position at 30:1 forex leverage requires only ~$3,300 of margin, not
+    # $100k of "exposure". Under the old formula, a single mini-FX lot maxed
+    # the 250% cap with all $5k capital tied up; the system stopped opening
+    # any trade and the cron went silent.
+    #
+    # New: divide notional by the approved leverage. For crypto perps at 3x
+    # this barely changes anything (the old behavior). For FX it makes the
+    # cap usable. Stops are still enforced by max_risk_per_trade_pct (2%) —
+    # this gate is the secondary belt-and-suspenders for margin overcommit.
     notional = checks["position_size"]["position_size"] * entry_price
-    margin_required = notional  # margin = notional / leverage, but exposure tracks notional risk
+    approved_leverage = max(1, int(checks["leverage"].get("approved") or 1))
+    margin_required = notional / approved_leverage
     checks["exposure"] = check_portfolio_exposure(capital, margin_required, db_path)
     if checks["exposure"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["exposure"]["reason"])
