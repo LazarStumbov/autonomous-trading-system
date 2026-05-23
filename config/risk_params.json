@@ -66,7 +66,7 @@
     }
   },
   "capital": {
-    "_comment": "Paper-test capital. OKX demo holds ~$159k and Alpaca paper ~$100k of virtual equity, but the system sizes against THIS number, not the broker balance — keeps paper risk controllable while broker provides realistic fills. Live-money flip will swap this for actual capital later.",
+    "_comment": "Paper-test capital. OKX demo holds ~$159k and Alpaca paper ~$100k of virtual equity, but the system sizes against THIS number, not the broker balance \u2014 keeps paper risk controllable while broker provides realistic fills. Live-money flip will swap this for actual capital later.",
     "initial_market_usd": 5000,
     "initial_polymarket_usd": 500,
     "rebalance_threshold_pct": 20
@@ -75,7 +75,7 @@
     "_comment": "Loosened parameters applied only when PAPER_MODE=true, to generate a richer paper trade sample for review. Live trading uses the strict values above. The 250% exposure ceiling allows 2-3 concurrent full-notional positions; with 3x leverage that's ~83% margin usage which is acceptable for virtual capital.",
     "min_confluence_score": 50,
     "min_risk_reward_ratio": 1.5,
-    "max_portfolio_exposure_pct": 250.0,
+    "max_portfolio_exposure_pct": 400.0,
     "max_daily_drawdown_pct": 20.0,
     "initial_market_usd": 500,
     "polymarket_min_confluence_score": 60,
