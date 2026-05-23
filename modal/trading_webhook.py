@@ -103,11 +103,6 @@ def _dead_man_check(max_stale_minutes: int = 120) -> None:
         print(f"  [dead-man-failed] {e}")
 
 
-# In-process flag so we only emit the empty-wallets warning to Telegram once
-# per container lifetime (otherwise the hourly cron spams the user).
-_PM_GUARD_WARNED = False
-
-
 def _pm_guard_ok() -> bool:
     """Refuse to run the PM hot-path when tracked_accounts is empty.
 
@@ -117,27 +112,57 @@ def _pm_guard_ok() -> bool:
     fix already gates _paper_heuristic_estimate, but this guard provides
     defence in depth: if wallets haven't been discovered, the PM block
     short-circuits entirely.
+
+    Telegram-throttle: warn AT MOST ONCE every 24 hours. Previous version
+    used a module-level _PM_GUARD_WARNED flag, but Modal spawns a fresh
+    container per cron tick — so that flag reset every hour and the user
+    got spammed. State is now persisted to system_state.last_pm_empty_warn_at
+    so the throttle survives container restarts.
     """
-    global _PM_GUARD_WARNED
     try:
         with open("/app/config/polymarket_accounts.json") as f:
             cfg = json.load(f)
         tracked = cfg.get("tracked_accounts", []) or []
         if tracked:
             return True
-        msg = (
-            "⚠️ <b>PM hot-path SKIPPED</b>\n"
-            "<i>tracked_accounts is empty.</i> Run discover_wallets.py "
-            "(weekly cron Sun 12:00 UTC) or trigger manually."
-        )
-        if not _PM_GUARD_WARNED:
-            _notify(msg)
-            _PM_GUARD_WARNED = True
-        print(f"  [pm-guard] skipping PM block — tracked_accounts empty")
-        return False
     except Exception as e:
         print(f"  [pm-guard] could not read polymarket_accounts.json: {e} — allowing PM block")
         return True
+
+    # tracked_accounts is empty. Skip the PM block; warn at most once per 24h.
+    print(f"  [pm-guard] skipping PM block — tracked_accounts empty")
+    try:
+        sys.path.insert(0, "/app")
+        from lib.db import get_connection, get_system_state, set_system_state
+        from datetime import datetime as _dt, timezone as _tz
+        conn = get_connection()
+        try:
+            last = get_system_state(conn, "last_pm_empty_warn_at")
+            now = _dt.now(_tz.utc)
+            should_warn = True
+            if last:
+                try:
+                    ts = _dt.fromisoformat(last.replace("Z", "+00:00"))
+                    if (now - ts).total_seconds() < 24 * 3600:
+                        should_warn = False
+                except (ValueError, AttributeError):
+                    pass
+            if should_warn:
+                _notify(
+                    "⚠️ <b>PM hot-path SKIPPED</b>\n"
+                    "<i>tracked_accounts is empty.</i> Run discover_wallets.py "
+                    "(weekly cron Sun 12:00 UTC) or trigger manually.\n"
+                    "<i>(One warning per 24h.)</i>"
+                )
+                set_system_state(conn, "last_pm_empty_warn_at", now.isoformat())
+        finally:
+            conn.close()
+    except Exception as e:
+        # If DB throttle fails for any reason, fall back to silent skip
+        # rather than spamming.
+        print(f"  [pm-guard] warn-throttle failed (suppressing alert): {e}")
+    return False
+
 
 # Modal app definition
 app = modal.App("autonomous-trading-system")
