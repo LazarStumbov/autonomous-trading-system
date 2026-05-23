@@ -383,6 +383,10 @@ def opus_daily_brief():
     # Step 2: Single Opus 4.7 call that consumes the research + open positions
     #         + closed trades + market regime, and writes the daily brief.
     _run(f"{news}/opus_daily_review.py", timeout=300)
+    # Step 3: one-line Haiku status heartbeat (~$0.001/day). Piggybacks on
+    # opus_daily_brief because Modal free tier is at the 5-cron limit; the
+    # heartbeat is naturally daily-cadence so this is the right slot.
+    _run("/app/.claude/skills/performance-report/scripts/heartbeat_summary.py", timeout=60)
 
     print(f"[{timestamp}] Opus 4.7 daily brief complete")
 

@@ -19,14 +19,40 @@ from lib.paper_engine import is_paper_mode, simulate_order, broker_mode
 from lib.brokers.okx_adapter import get_exchange, OkxAdapter as _OkxAdapter
 
 def get_balance(exchange) -> dict:
-    """Compatibility shim: return {'free': float, 'total': float} from OKX balance."""
+    """Compatibility shim: return {'free': float, 'total': float} in USD.
+
+    OKX unified-account / EU-demo accounts hold a mix of collateral assets
+    (USDC, USD, EUR, plus BTC/XRP/ETH spot) instead of plain USDT. Same fix
+    that lib/brokers/okx_adapter.fetch_balance_usd() got: read
+    info.data[0].totalEq (the USD-equivalent of all assets at current marks)
+    rather than just USDT. Falls back to USDT if totalEq isn't present
+    (classic non-unified accounts that hold only USDT).
+
+    Before this fix every OKX leg of the cron failed with
+    'Insufficient balance: $0.00 free, need $X.XX' even though the demo
+    account had $159k of virtual equity.
+    """
     try:
         raw = exchange.fetch_balance({"type": "swap"})
+        # Path 1: unified account totalEq (preferred)
+        info = raw.get("info") or {}
+        data = info.get("data") or []
+        if data and isinstance(data, list):
+            total_eq = data[0].get("totalEq")
+            if total_eq not in (None, "", "0"):
+                eq = float(total_eq)
+                # Approximation: free margin ≈ total equity for unified
+                # account in cross mode with no open positions; OKX may
+                # reduce free on open positions. The risk_engine adds a
+                # safety margin elsewhere; this is good enough.
+                return {"free": eq, "total": eq}
+        # Path 2: plain USDT
         usdt = raw.get("USDT") or {}
         if isinstance(usdt, dict):
             return {"free": float(usdt.get("free") or 0), "total": float(usdt.get("total") or 0)}
         return {"free": float(usdt or 0), "total": float(usdt or 0)}
-    except Exception:
+    except Exception as e:
+        print(f"[get_balance] failed: {e}")
         return {"free": 0.0, "total": 0.0}
 
 def set_leverage(exchange, symbol: str, leverage: int) -> None:
@@ -422,31 +448,39 @@ def _log_to_db(order: dict, result: dict):
         init_db()
         conn = get_connection()
 
-        trade_id = log_trade(
-            conn,
-            pillar=Pillar.MARKET,
-            asset=order["asset"],
-            direction=order["direction"],
-            entry_price=order["entry_price"],
-            quantity=order["position_size"],
-            leverage=order["leverage"],
-            stop_loss=order["stop_loss"],
-            initial_sl=order["stop_loss"],
-            take_profit=order["take_profit"],
-            status=TradeStatus.OPEN if result["status"] in ("EXECUTED", "DRY_RUN") else TradeStatus.CANCELLED,
-            strategy=order.get("strategy", ""),
-            confluence_score=order.get("confluence_score", 0),
-            signals_json=json.dumps(order.get("signals", [])),
-            reasoning=order.get("reasoning", ""),
-            risk_check_result=result["status"],
-            opened_at=datetime.now(timezone.utc).isoformat(),
-            broker=_resolve_broker_label(order, result),
-        )
-
+        # Defensive: build kwargs so we can print them if log_trade raises.
+        kwargs = {
+            "pillar":             Pillar.MARKET,
+            "asset":              order["asset"],
+            "direction":          order["direction"],
+            "entry_price":        order["entry_price"],
+            "quantity":           order["position_size"],
+            "leverage":           order["leverage"],
+            "stop_loss":          order["stop_loss"],
+            "initial_sl":         order["stop_loss"],
+            "take_profit":        order["take_profit"],
+            "status":             TradeStatus.OPEN if result["status"] in ("EXECUTED", "DRY_RUN") else TradeStatus.CANCELLED,
+            "strategy":           order.get("strategy", ""),
+            "confluence_score":   order.get("confluence_score", 0),
+            "signals_json":       json.dumps(order.get("signals", [])),
+            "reasoning":          order.get("reasoning", ""),
+            "risk_check_result":  result["status"],
+            "opened_at":          datetime.now(timezone.utc).isoformat(),
+            "broker":             _resolve_broker_label(order, result),
+        }
+        trade_id = log_trade(conn, **kwargs)
         result["trade_id"] = trade_id
         conn.close()
     except Exception as e:
+        # Make the failure visible — previously swallowed silently into
+        # result['db_error'] which no caller logged. That's how XAGUSD
+        # 'EXECUTED' trades vanished without a DB row.
         result["db_error"] = str(e)
+        try:
+            asset = order.get("asset", "?")
+            print(f"[_log_to_db] EXCEPTION for {asset}: {type(e).__name__}: {e}")
+        except Exception:
+            print(f"[_log_to_db] EXCEPTION: {type(e).__name__}: {e}")
 
 
 def main():
