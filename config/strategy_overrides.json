@@ -1,6 +1,9 @@
 {
   "description": "Manual overrides for the strategy registry. Loader applies these on top of DB-stored mode. See lib/strategy_loader.py.",
   "force_enable": [],
-  "force_disable": [],
+  "force_disable": [
+    "lean.volatility_targeting",
+    "community.vwap_reversion"
+  ],
   "pin_params": {}
 }
