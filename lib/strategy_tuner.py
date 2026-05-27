@@ -80,15 +80,16 @@ def compute_metrics(trades: list[dict]) -> dict:
     last_20 = trades[-20:]
     last_20_wr = sum(1 for t in last_20 if (t.get("pnl_usd") or 0) > 0) / len(last_20) if last_20 else 0.0
 
-    # 30-day Sharpe approximation
+    # 30-day Sharpe approximation — requires ≥ 3 trades; single-trade std is 0
+    # which produces a divide-by-1e-9 artefact in the billions.
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     recent = [t for t in trades if t.get("closed_at") and datetime.fromisoformat(t["closed_at"].replace("Z", "+00:00")) >= cutoff]
-    if recent:
+    if len(recent) >= 3:
         rets = [t.get("pnl_pct") or 0 for t in recent]
         mean = sum(rets) / len(rets)
         var = sum((r - mean) ** 2 for r in rets) / len(rets)
-        std = math.sqrt(var) if var > 0 else 1e-9
-        sharpe_30d = (mean / std) * math.sqrt(252) if std > 0 else 0.0
+        std = math.sqrt(var) if var > 0 else None
+        sharpe_30d = (mean / std) * math.sqrt(252) if std else 0.0
     else:
         sharpe_30d = 0.0
 

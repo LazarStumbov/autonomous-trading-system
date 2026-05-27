@@ -449,6 +449,17 @@ def daily_report():
     print(f"[{timestamp}] Generating daily report...")
     _heartbeat("daily_report")
 
+    # Refresh strategy_performance aggregates from the full trade journal so
+    # any trades closed outside position_monitor (e.g. SQL patches) are
+    # reflected before reporting or self-improve reads the registry.
+    try:
+        sys.path.insert(0, "/app")
+        from lib.strategy_tuner import refresh_all_performance
+        refresh_all_performance()
+        print("[daily_report] strategy_performance refreshed")
+    except Exception as e:
+        print(f"[daily_report] strategy_performance refresh failed (non-fatal): {e}")
+
     perf = "/app/.claude/skills/performance-report/scripts"
     imp  = "/app/.claude/skills/self-improve/scripts"
 
