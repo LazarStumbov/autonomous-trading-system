@@ -95,7 +95,7 @@ def load_signals_from_files(signals_dir: str = None) -> list[dict]:
     for setup in setups_data.get("setups", []) if isinstance(setups_data, dict) else []:
         all_signals.append({
             "symbol": _normalize_symbol(setup["symbol"], norm),
-            "type": SignalType.TECHNICAL_BREAKOUT,
+            "type": _classify_signal_type(setup.get("strategy", "")),
             "direction": setup["direction"],
             "strength": setup.get("confidence", 50) / 100,
             "source": f"screener_{setup['strategy']}",
@@ -134,6 +134,29 @@ def load_signals_from_files(signals_dir: str = None) -> list[dict]:
                 "source": "signal_follow",
                 "detail": sig,
             })
+
+    # FRED macro regime — emits CROSS_ASSET_CORRELATION signals for assets where
+    # the macro backdrop aligns directionally. Adds a second signal type to TA
+    # setups without any additional API calls (FRED data already collected).
+    macro_data = _load_json_safe(os.path.join(signals_dir, "macro_fred.json"))
+    if macro_data and isinstance(macro_data, dict):
+        series = macro_data.get("series", {})
+        dgs10 = (series.get("DGS10") or {}).get("delta_30d") or 0
+        # Rising yields (>0.2pp 30d) = risk-off for equities/crypto, bullish for short bonds
+        # Falling yields (<-0.2pp 30d) = risk-on
+        if abs(dgs10) >= 0.2:
+            macro_direction = "short" if dgs10 > 0 else "long"
+            macro_asset_classes = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT",
+                                   "SPY", "QQQ", "NAS100", "SPX500"]
+            for sym in macro_asset_classes:
+                all_signals.append({
+                    "symbol": _normalize_symbol(sym, norm),
+                    "type": SignalType.CROSS_ASSET_CORRELATION,
+                    "direction": macro_direction,
+                    "strength": min(1.0, abs(dgs10) / 1.0),
+                    "source": "fred_macro",
+                    "detail": {"dgs10_delta_30d": dgs10},
+                })
 
     # TradingView signals — alert_parser writes tv_setup.json; indicator_mapper
     # enriches it with signal_type. Glob tv_*.json so Phase 2 pull-scanner output
