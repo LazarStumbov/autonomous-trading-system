@@ -1,39 +1,74 @@
 {% extends "_base.html" %}
+{% block title %}Strategies{% endblock %}
 {% block content %}
-<h2>Strategies ({{ strategies|length }})</h2>
-<table>
-<thead><tr>
-  <th>id</th><th>mode</th><th>source</th>
-  <th>TV trades</th><th>TV WR</th><th>severity</th>
-  <th>live trades</th><th>live WR</th>
-  <th>PF</th><th>Sharpe(30d)</th><th>last trade</th>
-</tr></thead>
-<tbody>
-{% for s in strategies %}
-<tr>
-  <td><code>{{ s.id }}</code></td>
-  <td>
-    {% if s.mode == 'live' %}<span class="green">live</span>
-    {% elif s.mode == 'paper' %}<span class="green">paper</span>
-    {% elif s.mode == 'disabled' %}<span class="red">disabled</span>
-    {% else %}{{ s.mode }}{% endif %}
-  </td>
-  <td>{{ s.source }}</td>
-  <td>{{ s.tv_trades or 0 }}</td>
-  <td>{% if s.tv_win_rate is not none %}{{ '%.0f'|format(s.tv_win_rate * 100) }}%{% endif %}</td>
-  <td>
-    {% if s.tv_severity_passed == 1 %}<span class="green">PASS</span>
-    {% elif s.tv_severity_passed == 0 and s.tv_trades %}<span class="red">FAIL</span>
-    {% else %}-{% endif %}
-  </td>
-  <td>{{ s.total_trades or 0 }}</td>
-  <td>{% if s.win_rate is not none %}{{ '%.0f'|format(s.win_rate * 100) }}%{% endif %}</td>
-  <td>{% if s.profit_factor is not none %}{{ '%.2f'|format(s.profit_factor) }}{% endif %}</td>
-  <td>{% if s.sharpe_30d is not none %}{{ '%.2f'|format(s.sharpe_30d) }}{% endif %}</td>
-  <td>{{ (s.last_trade_at or '')[:19] }}</td>
-</tr>
+<h2>Strategy Ladder ({{ strategies|length }} total)</h2>
+
+{% if promotable %}
+<div style="background:#1a3a1a;border:1px solid var(--green);border-radius:6px;padding:12px 16px;margin-bottom:20px">
+  <strong style="color:var(--green)">🚀 Promotion Candidates ({{ promotable|length }})</strong>
+  — paper strategies with ≥20 trades, PF &gt; 1.4, Sharpe &gt; 1.0
+  <ul style="margin:6px 0 0;padding-left:20px;font-size:13px">
+  {% for s in promotable %}
+    <li><code>{{ s.id }}</code> — {{ s.total_trades }} trades, PF {{ '%.2f'|format(s.profit_factor) }}, Sharpe {{ '%.2f'|format(s.sharpe_30d) }}</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% set mode_labels = {'live': '🟢 Live', 'paper': '🟡 Paper', 'backtest': '🔵 Backtest', 'disabled': '🔴 Disabled', 'backtest_validated': '🔵 Backtest Validated', 'archived': '⬜ Archived'} %}
+
+{% for mode in mode_order %}
+  {% if mode in by_mode and by_mode[mode] %}
+  <details open>
+    <summary style="cursor:pointer;padding:8px 4px;font-size:15px;font-weight:600;color:var(--accent);border-bottom:1px solid var(--border);margin-bottom:8px;list-style:none">
+      {{ mode_labels.get(mode, mode)|upper }} ({{ by_mode[mode]|length }})
+    </summary>
+    <table style="margin-bottom:20px">
+      <thead><tr>
+        <th>ID</th>
+        <th>Source</th>
+        <th>Trades</th>
+        <th>Win Rate</th>
+        <th>Profit Factor</th>
+        <th>Sharpe 30d</th>
+        <th>P&amp;L</th>
+        <th>Last Trade</th>
+        <th>Note</th>
+      </tr></thead>
+      <tbody>
+      {% for s in by_mode[mode] %}
+        <tr>
+          <td><code>{{ s.id }}</code></td>
+          <td class="muted" style="font-size:11px">{{ s.source or '—' }}</td>
+          <td>{{ s.total_trades or 0 }}</td>
+          <td>
+            {% if s.win_rate is not none %}
+              <span class="{{ 'green' if s.win_rate >= 0.5 else 'red' }}">{{ '%.0f'|format(s.win_rate * 100) }}%</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if s.profit_factor is not none %}
+              <span class="{{ 'green' if s.profit_factor >= 1 else 'red' }}">{{ '%.2f'|format(s.profit_factor) }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{% if s.sharpe_30d is not none %}{{ '%.2f'|format(s.sharpe_30d) }}{% else %}—{% endif %}</td>
+          <td>
+            {% if s.total_pnl_usd is not none %}
+              <span class="{{ 'green' if s.total_pnl_usd >= 0 else 'red' }}">${{ '%+.2f'|format(s.total_pnl_usd) }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="muted" style="font-size:11px">{{ (s.last_trade_at or '')[:10] or '—' }}</td>
+          <td style="font-size:11px;color:var(--red)">{{ s.demotion_reason or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
 {% endfor %}
-</tbody>
-</table>
-<p class="muted">Strategies marked <span class="red">disabled</span> failed the &ge;200-trade TV severity gate; reasons live in the demotion_reason column.</p>
+
+<p class="muted" style="font-size:12px;margin-top:24px">
+  Promotion to live requires paper ≥20 trades, PF &gt; 1.4, Sharpe &gt; 1.0.
+  Disabled strategies failed the severity gate or were manually demoted.
+</p>
 {% endblock %}

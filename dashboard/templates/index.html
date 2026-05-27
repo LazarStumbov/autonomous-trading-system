@@ -1,12 +1,17 @@
 {% extends "_base.html" %}
+{% block title %}Status{% endblock %}
 {% block content %}
-<h2>System status</h2>
+<h2>System Status</h2>
+
 <div class="metrics">
   <div class="m {{ 'red' if halted else 'green' }}">
     <div class="label">Trading</div>
     <div class="val">{{ 'HALTED' if halted else 'ONLINE' }}</div>
   </div>
-  <div class="m"><div class="label">Open positions</div><div class="val">{{ open_positions|length }}</div></div>
+  <div class="m">
+    <div class="label">Paper Balance</div>
+    <div class="val">${{ '%.2f'|format(paper_balance_usd) }}</div>
+  </div>
   <div class="m {{ 'green' if daily_pnl >= 0 else 'red' }}">
     <div class="label">Day P&amp;L ({{ daily_count }} trades)</div>
     <div class="val">${{ '%+.2f'|format(daily_pnl) }}</div>
@@ -15,29 +20,103 @@
     <div class="label">Week P&amp;L ({{ weekly_count }} trades)</div>
     <div class="val">${{ '%+.2f'|format(weekly_pnl) }}</div>
   </div>
-  <div class="m"><div class="label">API spend MTD</div><div class="val">${{ '%.2f'|format(api_mtd) }}</div></div>
+  <div class="m {{ 'red' if consecutive_losses >= 3 else '' }}">
+    <div class="label">Consec. Losses</div>
+    <div class="val">{{ consecutive_losses }}</div>
+  </div>
+  <div class="m">
+    <div class="label">API Spend MTD</div>
+    <div class="val">${{ '%.3f'|format(api_mtd) }}</div>
+  </div>
 </div>
 
-<h3>Open positions</h3>
+<!-- Live positions auto-refreshes every 15s via htmx -->
+<div id="positions-widget"
+     hx-get="/api/health/poll.json"
+     hx-trigger="every 15s"
+     hx-swap="none"
+     hx-on::after-request="window.updateStatusBar(event)">
+</div>
+
+<h3>Open Positions ({{ open_positions|length }}) <a href="/positions" style="font-size:12px;color:var(--muted);margin-left:8px">live view →</a></h3>
 {% if open_positions %}
 <table>
-  <thead><tr><th>id</th><th>asset</th><th>dir</th><th>entry</th><th>SL</th><th>TP</th><th>strategy</th><th>opened</th></tr></thead>
+  <thead><tr>
+    <th>ID</th><th>Asset</th><th>Dir</th><th>Entry</th><th>SL</th><th>TP</th>
+    <th>Lev</th><th>Strategy</th><th>Opened</th>
+  </tr></thead>
   <tbody>
   {% for t in open_positions %}
     <tr>
       <td><a href="/trades/{{ t.id }}">{{ t.id }}</a></td>
       <td>{{ t.asset }}</td>
-      <td class="{{ 'green' if t.direction == 'long' else 'red' }}">{{ t.direction|upper }}</td>
+      <td><span class="badge {{ 'long' if t.direction == 'long' else 'short' }}">{{ t.direction|upper }}</span></td>
       <td>${{ '%.4f'|format(t.entry_price) }}</td>
-      <td>${{ '%.4f'|format(t.stop_loss or 0) }}</td>
-      <td>${{ '%.4f'|format(t.take_profit or 0) }}</td>
-      <td>{{ t.strategy or '?' }}</td>
-      <td>{{ (t.opened_at or '')[:19] }}</td>
+      <td>{{ '$%.4f'|format(t.stop_loss) if t.stop_loss else '—' }}</td>
+      <td>{{ '$%.4f'|format(t.take_profit) if t.take_profit else '—' }}</td>
+      <td>{{ t.leverage or 1 }}x</td>
+      <td>{{ t.strategy or '—' }}</td>
+      <td class="muted">{{ (t.opened_at or '')[:16] }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p class="muted">No open positions.</p>
+<p class="muted">No open positions. <a href="/signals">Check signal funnel →</a></p>
 {% endif %}
+
+<div class="row3" style="margin-top:24px">
+  <div>
+    <h3>Quick Links</h3>
+    <table>
+      <tr><td><a href="/positions">Live Positions</a></td><td class="muted">mark prices, unrealized P&amp;L</td></tr>
+      <tr><td><a href="/risk">Risk Dashboard</a></td><td class="muted">exposure, VaR, correlations</td></tr>
+      <tr><td><a href="/performance">Performance</a></td><td class="muted">Sharpe, Sortino, attribution</td></tr>
+      <tr><td><a href="/signals">Signal Funnel</a></td><td class="muted">raw → scored → executed</td></tr>
+      <tr><td><a href="/strategies">Strategy Ladder</a></td><td class="muted">live/paper/disabled modes</td></tr>
+      <tr><td><a href="/news">News &amp; Regime</a></td><td class="muted">market regime, headlines</td></tr>
+      <tr><td><a href="/trades">All Trades</a></td><td class="muted">full history</td></tr>
+      <tr><td><a href="/m">📱 Mobile View</a></td><td class="muted">on-call minimal screen</td></tr>
+    </table>
+  </div>
+  <div style="grid-column: span 2">
+    <h3>System Health <a href="/health" style="font-size:11px;color:var(--muted);margin-left:6px">JSON →</a></h3>
+    <div id="health-widget" style="font-size:13px;line-height:1.8">
+      <em class="muted">Loading…</em>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  fetch('/api/health/poll.json')
+    .then(r => r.json())
+    .then(data => {
+      const hw = document.getElementById('health-widget');
+      if (!hw) return;
+      const flags = data.flags || {};
+      const cs = data.cron_status || {};
+      let html = '<table style="font-size:12px">';
+      // Flags
+      Object.entries(flags).forEach(([k, v]) => {
+        const ok = v === true;
+        const color = k === 'overall_ok' ? (ok ? 'var(--green)' : 'var(--red)') : (ok ? 'var(--green)' : 'var(--red)');
+        html += `<tr><td style="color:var(--muted);width:180px">${k}</td><td style="color:${color}">${ok ? '✓' : '✗'}</td></tr>`;
+      });
+      // Cron jobs
+      Object.entries(cs).forEach(([job, x]) => {
+        const age = x.age_minutes != null ? Math.round(x.age_minutes) + 'm' : '?';
+        const color = x.stale ? 'var(--red)' : 'var(--green)';
+        html += `<tr><td style="color:var(--muted)">cron:${job}</td><td style="color:${color}">${age} ago</td></tr>`;
+      });
+      html += '</table>';
+      hw.innerHTML = html;
+      // Also update status bar
+      window.updateStatusBar({detail: {xhr: {responseText: JSON.stringify(data)}}});
+    })
+    .catch(() => {
+      document.getElementById('health-widget').innerHTML = '<span class="muted">Health check failed</span>';
+    });
+});
+</script>
 {% endblock %}

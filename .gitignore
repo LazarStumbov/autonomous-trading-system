@@ -62,3 +62,7 @@ data/memory/
 Daily Market Overview/
 Daily market briefing/
 Iran crisis/
+
+# Sensitive recovery keys (never commit)
+.Polymerket recovery key.pages
+*recovery*key*

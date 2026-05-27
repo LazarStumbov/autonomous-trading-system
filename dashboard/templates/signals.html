@@ -1,0 +1,61 @@
+{% extends "_base.html" %}
+{% block title %}Signals{% endblock %}
+{% block content %}
+<h2>Signal Funnel — Last 24h</h2>
+
+{% set max_count = [raw_signals, 1]|max %}
+<div class="funnel">
+  {% for step in [
+    ('Raw Signals', raw_signals),
+    ('Risk Checks', risk_checks),
+    ('Risk Passed', risk_passed),
+    ('Alerts', alerts_count),
+    ('Executed', executed),
+  ] %}
+  <div class="funnel-step">
+    <div class="f-label">{{ step[0] }}</div>
+    <div class="f-bar" style="width:{{ [(step[1] / max_count * 400)|int, 4]|max }}px"></div>
+    <div class="f-count">{{ step[1] }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if alerts_data and alerts_data.alerts %}
+<h3>Today's Alerts ({{ alerts_data.alerts|length }})</h3>
+<table>
+  <thead><tr><th>Symbol</th><th>Dir</th><th>Score</th><th>Tier</th><th>Entry</th><th>SL</th><th>TP</th><th>Strategy</th></tr></thead>
+  <tbody>
+  {% for a in alerts_data.alerts %}
+  <tr>
+    <td>{{ a.symbol }}</td>
+    <td class="{{ 'green' if a.direction == 'long' else 'red' }}">{{ (a.direction or '')|upper }}</td>
+    <td>{{ a.confluence_score or '—' }}</td>
+    <td>{{ a.tier or '—' }}</td>
+    <td>{{ '%.4f'|format(a.entry_price) if a.entry_price else '—' }}</td>
+    <td>{{ '%.4f'|format(a.stop_loss) if a.stop_loss else '—' }}</td>
+    <td>{{ '%.4f'|format(a.take_profit) if a.take_profit else '—' }}</td>
+    <td>{{ a.strategy or '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h3>Recent Signals (last 50)</h3>
+<table>
+  <thead><tr><th>id</th><th>type</th><th>asset</th><th>direction</th><th>strength</th><th>acted</th><th>time</th></tr></thead>
+  <tbody>
+  {% for s in recent_signals %}
+  <tr>
+    <td>{{ s.id }}</td>
+    <td>{{ s.signal_type or '—' }}</td>
+    <td>{{ s.asset or '—' }}</td>
+    <td class="{{ 'green' if s.direction == 'long' else ('red' if s.direction == 'short' else '') }}">{{ s.direction or '—' }}</td>
+    <td>{{ '%.1f'|format(s.strength) if s.strength is not none else '—' }}</td>
+    <td class="{{ 'green' if s.acted_on else 'muted' }}">{{ '✓' if s.acted_on else '—' }}</td>
+    <td>{{ (s.timestamp or '')[:19] }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

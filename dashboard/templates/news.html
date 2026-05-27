@@ -1,0 +1,50 @@
+{% extends "_base.html" %}
+{% block title %}News & Regime{% endblock %}
+{% block content %}
+<h2>Market Regime &amp; News</h2>
+
+{% if regime %}
+<div class="stats-grid" style="margin-bottom:20px">
+  <div class="stat-box">
+    <div class="s-label">Regime</div>
+    <div class="s-val">{{ regime.regime or regime.current or '—' }}</div>
+  </div>
+  {% if regime.bias %}
+  <div class="stat-box">
+    <div class="s-label">Bias</div>
+    <div class="s-val">{{ regime.bias }}</div>
+  </div>
+  {% endif %}
+  {% if regime.updated_at %}
+  <div class="stat-box">
+    <div class="s-label">Updated</div>
+    <div class="s-val" style="font-size:13px">{{ regime.updated_at[:16] }}</div>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<p class="muted">No regime data found at data/memory/market_regime.json.</p>
+{% endif %}
+
+{% if news_items %}
+<h3>Today's Headlines ({{ news_items|length }})</h3>
+<table>
+  <thead><tr><th>Source</th><th>Headline</th><th>Sentiment</th><th>Assets</th><th>Time</th></tr></thead>
+  <tbody>
+  {% for item in news_items %}
+  <tr>
+    <td class="muted">{{ item.source or '—' }}</td>
+    <td>{{ item.title or item.headline or '—' }}</td>
+    <td class="{{ 'green' if (item.sentiment or '') == 'positive' else ('red' if (item.sentiment or '') == 'negative' else 'muted') }}">
+      {{ item.sentiment or '—' }}
+    </td>
+    <td>{{ (item.assets or item.related_assets or [])|join(', ') }}</td>
+    <td class="muted">{{ (item.published_at or item.time or '')[:16] }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No news data for today (data/signals/YYYY-MM-DD/news.json not found).</p>
+{% endif %}
+{% endblock %}

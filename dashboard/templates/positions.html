@@ -1,0 +1,41 @@
+{% extends "_base.html" %}
+{% block title %}Positions{% endblock %}
+{% block content %}
+<h2>Live Positions</h2>
+<p class="muted">Mark prices and unrealized P&amp;L update via SSE every ~5 seconds.</p>
+
+<table id="pos-table">
+  <thead>
+    <tr>
+      <th>ID</th><th>Asset</th><th>Dir</th><th>Entry</th>
+      <th>Mark (live)</th><th>Unr. P&amp;L</th>
+      <th>→ SL</th><th>→ TP</th><th>Lev</th>
+    </tr>
+  </thead>
+  <tbody id="live-tbody">
+    {% for p in positions %}
+    <tr data-id="{{ p.id }}">
+      <td><a href="/trades/{{ p.id }}">{{ p.id }}</a></td>
+      <td>{{ p.asset }}</td>
+      <td><span class="badge {{ 'long' if p.direction == 'long' else 'short' }}">{{ p.direction|upper }}</span></td>
+      <td>${{ '%.4f'|format(p.entry_price) }}</td>
+      <td class="pnl-live">—</td>
+      <td class="pnl-live">—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>{{ p.leverage or 1 }}x</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted" style="text-align:center;padding:20px">No open positions.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if positions %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    window.startLivePositions('live-tbody');
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "_base.html" %}
+{% block title %}Performance{% endblock %}
+{% block content %}
+<h2>Performance</h2>
+
+<div class="stats-grid">
+  <div class="stat-box">
+    <div class="s-label">Total Trades</div>
+    <div class="s-val">{{ metrics.total_trades }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Win Rate</div>
+    <div class="s-val {{ 'pos' if metrics.win_rate >= 50 else 'neg' }}">{{ metrics.win_rate }}%</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Total P&amp;L</div>
+    <div class="s-val {{ 'pos' if metrics.total_pnl >= 0 else 'neg' }}">${{ '%+.2f'|format(metrics.total_pnl) }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Profit Factor</div>
+    <div class="s-val {{ 'pos' if metrics.profit_factor and metrics.profit_factor != '∞' and metrics.profit_factor|float >= 1 else '' }}">{{ metrics.profit_factor }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Expectancy / Trade</div>
+    <div class="s-val {{ 'pos' if metrics.expectancy >= 0 else 'neg' }}">${{ '%+.2f'|format(metrics.expectancy) }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Avg Win</div>
+    <div class="s-val pos">${{ '%.2f'|format(metrics.avg_win) }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Avg Loss</div>
+    <div class="s-val neg">${{ '%.2f'|format(metrics.avg_loss) }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Max Consec. Losses</div>
+    <div class="s-val {{ 'neg' if metrics.max_consecutive_losses >= 3 else '' }}">{{ metrics.max_consecutive_losses }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Sharpe (ann.)</div>
+    <div class="s-val {{ 'pos' if metrics.sharpe_30d and metrics.sharpe_30d >= 1 else ('neg' if metrics.sharpe_30d and metrics.sharpe_30d < 0 else '') }}">{{ metrics.sharpe_30d if metrics.sharpe_30d is not none else '—' }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Sortino (ann.)</div>
+    <div class="s-val">{{ metrics.sortino if metrics.sortino is not none else '—' }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Calmar</div>
+    <div class="s-val">{{ metrics.calmar if metrics.calmar is not none else '—' }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Max Drawdown</div>
+    <div class="s-val {{ 'neg' if metrics.max_drawdown_pct and metrics.max_drawdown_pct > 10 else '' }}">{{ metrics.max_drawdown_pct if metrics.max_drawdown_pct is not none else '—' }}{{ '%' if metrics.max_drawdown_pct is not none else '' }}</div>
+  </div>
+</div>
+
+{% if equity_labels %}
+<div class="row3">
+  <div class="chart-box" style="grid-column: 1 / -1; height: 280px">
+    <h3>Equity Curve</h3>
+    <canvas id="equity-chart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+{% if strategy_attr %}
+<div class="row3">
+  <div class="chart-box" style="height:240px">
+    <h3>P&amp;L by Strategy</h3>
+    <canvas id="strat-chart"></canvas>
+  </div>
+  <div class="chart-box" style="height:240px">
+    <h3>P&amp;L by Asset</h3>
+    <canvas id="asset-chart"></canvas>
+  </div>
+  <div class="chart-box" style="height:240px">
+    <h3>P&amp;L by Direction</h3>
+    <canvas id="dir-chart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  {% if equity_labels %}
+  window.makeLineChart('equity-chart',
+    {{ equity_labels|tojson }},
+    {{ equity_values|tojson }},
+    'Equity', '#d4af37'
+  );
+  {% endif %}
+  {% if strategy_attr %}
+  window.makeBarChart('strat-chart',
+    {{ strategy_attr|map(attribute='strategy_id')|list|tojson }},
+    {{ strategy_attr|map(attribute='total_pnl_usd')|list|tojson }},
+    'P&L by Strategy'
+  );
+  {% endif %}
+  {% if asset_attr %}
+  window.makeBarChart('asset-chart',
+    {{ asset_attr|map(attribute='asset')|list|tojson }},
+    {{ asset_attr|map(attribute='total_pnl')|list|tojson }},
+    'P&L by Asset'
+  );
+  {% endif %}
+  {% if dir_attr %}
+  window.makeBarChart('dir-chart',
+    {{ dir_attr|map(attribute='direction')|list|tojson }},
+    {{ dir_attr|map(attribute='total_pnl')|list|tojson }},
+    'P&L by Direction'
+  );
+  {% endif %}
+});
+</script>
+{% endblock %}

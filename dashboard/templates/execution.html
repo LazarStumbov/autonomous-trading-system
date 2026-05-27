@@ -1,0 +1,36 @@
+{% extends "_base.html" %}
+{% block title %}Execution Quality{% endblock %}
+{% block content %}
+<h2>Execution Quality</h2>
+
+{% if rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Trade ID</th><th>Asset</th><th>Dir</th><th>Entry Price</th>
+      <th>Arrival Price</th><th>Fill Price</th><th>Slippage (bps)</th>
+      <th>Venue</th><th>Date</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/trades/{{ r.id }}">{{ r.id }}</a></td>
+    <td>{{ r.asset }}</td>
+    <td class="{{ 'green' if r.direction == 'long' else 'red' }}">{{ (r.direction or '')|upper }}</td>
+    <td>${{ '%.4f'|format(r.entry_price or 0) }}</td>
+    <td>{{ '$%.4f'|format(r.arrival_price) if r.arrival_price else '—' }}</td>
+    <td>{{ '$%.4f'|format(r.fill_price) if r.fill_price else '—' }}</td>
+    <td class="{{ 'red' if r.slippage_bps and r.slippage_bps > 20 else '' }}">
+      {{ '%.1f'|format(r.slippage_bps) if r.slippage_bps else '—' }}
+    </td>
+    <td>{{ r.venue or '—' }}</td>
+    <td>{{ (r.opened_at or '')[:10] }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No execution quality data yet. The <code>execution_quality</code> table is populated when live orders are filled.</p>
+{% endif %}
+{% endblock %}

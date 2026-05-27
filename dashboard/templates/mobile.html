@@ -1,0 +1,60 @@
+{% extends "_base.html" %}
+{% block title %}📱 On-Call{% endblock %}
+{% block content %}
+<style>
+.m-hero { text-align: center; padding: 30px 0 20px; }
+.m-hero .big-pnl { font-size: 56px; font-weight: 700; }
+.m-card { background: var(--bg-light); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 10px 0; }
+.m-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.m-row:last-child { border-bottom: none; }
+.m-label { color: var(--muted); font-size: 13px; }
+.m-val { font-size: 15px; font-weight: 600; }
+.halt-big { width: 100%; padding: 14px; font-size: 18px; font-weight: 700; background: var(--red); color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }
+.system-ok { color: var(--green); font-size: 32px; text-align: center; padding: 10px; }
+.system-warn { color: var(--accent); font-size: 32px; text-align: center; padding: 10px; }
+.system-halt { color: var(--red); font-size: 32px; text-align: center; padding: 10px; }
+</style>
+
+<div class="m-hero">
+  <div class="muted" style="font-size:12px;margin-bottom:4px">TODAY P&amp;L</div>
+  <div class="big-pnl {{ 'green' if daily_pnl >= 0 else 'red' }}">${{ '%+.2f'|format(daily_pnl) }}</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">{{ daily_count }} trades closed today</div>
+</div>
+
+{% if halted %}
+<div class="system-halt">⛔ TRADING HALTED</div>
+{% elif consecutive_losses >= 3 %}
+<div class="system-warn">⚠ {{ consecutive_losses }} consecutive losses</div>
+{% else %}
+<div class="system-ok">✓ System OK</div>
+{% endif %}
+
+<div class="m-card">
+  <div class="m-row">
+    <span class="m-label">Paper Balance</span>
+    <span class="m-val">${{ '%.2f'|format(paper_balance_usd) }}</span>
+  </div>
+  <div class="m-row">
+    <span class="m-label">Open Positions</span>
+    <span class="m-val">{{ open_count }}</span>
+  </div>
+  <div class="m-row">
+    <span class="m-label">Daily Drawdown</span>
+    <span class="m-val {{ 'red' if daily_dd_pct and daily_dd_pct > 10 else '' }}">
+      {{ '%.1f'|format(daily_dd_pct) if daily_dd_pct else '0.0' }}%
+    </span>
+  </div>
+  <div class="m-row">
+    <span class="m-label">Consec. Losses</span>
+    <span class="m-val {{ 'red' if consecutive_losses >= 3 else '' }}">{{ consecutive_losses }}</span>
+  </div>
+</div>
+
+{% if not halted %}
+<button class="halt-big" onclick="window.haltTrading()">⏹ Emergency Halt</button>
+{% endif %}
+
+<p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">
+  <a href="/" style="color:var(--muted)">Full dashboard →</a>
+</p>
+{% endblock %}

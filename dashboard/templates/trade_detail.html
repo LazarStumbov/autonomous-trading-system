@@ -1,13 +1,120 @@
 {% extends "_base.html" %}
+{% block title %}Trade #{{ trade.id }}{% endblock %}
 {% block content %}
-<h2>Trade #{{ trade.id }} · {{ trade.asset }} · {{ trade.direction|upper }}</h2>
-<table class="kv">
-{% for k, v in trade.items() %}
-  {% if k != 'reasoning' %}
-  <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+<h2>Trade #{{ trade.id }} &middot; {{ trade.asset }} &middot;
+  <span class="{{ 'green' if trade.direction == 'long' else 'red' }}">{{ (trade.direction or '')|upper }}</span>
+  &middot;
+  <span class="badge {{ 'live' if trade.status == 'open' else ('halted' if trade.status == 'closed' and (trade.pnl_usd or 0) < 0 else 'paper') }}">
+    {{ (trade.status or '')|upper }}
+  </span>
+</h2>
+
+<div class="stats-grid" style="margin-bottom:20px">
+  <div class="stat-box">
+    <div class="s-label">Entry</div>
+    <div class="s-val">${{ '%.4f'|format(trade.entry_price or 0) }}</div>
+  </div>
+  {% if trade.stop_loss %}
+  <div class="stat-box">
+    <div class="s-label">Stop Loss</div>
+    <div class="s-val neg">${{ '%.4f'|format(trade.stop_loss) }}</div>
+  </div>
   {% endif %}
-{% endfor %}
-</table>
-<h3>Reasoning</h3>
-<pre>{{ reasoning_pretty }}</pre>
+  {% if trade.take_profit %}
+  <div class="stat-box">
+    <div class="s-label">Take Profit</div>
+    <div class="s-val pos">${{ '%.4f'|format(trade.take_profit) }}</div>
+  </div>
+  {% endif %}
+  {% if trade.pnl_usd is not none %}
+  <div class="stat-box">
+    <div class="s-label">P&amp;L</div>
+    <div class="s-val {{ 'pos' if trade.pnl_usd >= 0 else 'neg' }}">${{ '%+.2f'|format(trade.pnl_usd) }}</div>
+  </div>
+  {% endif %}
+  {% if trade.leverage %}
+  <div class="stat-box">
+    <div class="s-label">Leverage</div>
+    <div class="s-val">{{ trade.leverage }}x</div>
+  </div>
+  {% endif %}
+  {% if trade.quantity %}
+  <div class="stat-box">
+    <div class="s-label">Quantity</div>
+    <div class="s-val">{{ trade.quantity }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="row" style="gap:32px">
+  <div>
+    <h3>Trade Details</h3>
+    <table class="kv">
+    {% for k, v in trade.items() %}
+      {% if k not in ('reasoning',) and v is not none and v != '' %}
+      <tr>
+        <th>{{ k }}</th>
+        <td style="font-family:monospace;font-size:12px">{{ v }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </table>
+  </div>
+
+  <div>
+    <h3>Reasoning / Signal Context</h3>
+    {% if reasoning_parsed %}
+    <div style="margin-bottom:12px">
+      {% if reasoning_parsed.tier %}
+      <div style="margin-bottom:8px">
+        <span class="muted">Tier:</span>
+        <strong class="{{ 'green' if 'A' in reasoning_parsed.tier else ('red' if 'NO' in reasoning_parsed.tier else '') }}">
+          {{ reasoning_parsed.tier }}
+        </strong>
+      </div>
+      {% endif %}
+      {% if reasoning_parsed.conditions_met %}
+      <div>
+        <div class="muted" style="font-size:11px;margin-bottom:4px">CONDITIONS MET</div>
+        {% for c in reasoning_parsed.conditions_met %}
+        <div style="font-size:12px;padding:2px 0">✓ {{ c }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if reasoning_parsed.signal_summary %}
+      <div style="margin-top:10px">
+        <div class="muted" style="font-size:11px;margin-bottom:4px">SIGNAL SUMMARY</div>
+        <table style="font-size:12px">
+        {% for k, v in reasoning_parsed.signal_summary.items() %}
+          <tr><td style="color:var(--muted);padding-right:12px">{{ k }}</td><td>{{ v }}</td></tr>
+        {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <h4 style="color:var(--muted);font-size:12px;margin-top:16px">RAW REASONING</h4>
+    <pre style="font-size:11px;max-height:300px;overflow-y:auto">{{ reasoning_pretty }}</pre>
+
+    {% if partial_closes %}
+    <h3>Partial Closes</h3>
+    <table>
+      <thead><tr><th>Time</th><th>Qty Closed</th><th>Price</th><th>P&amp;L</th></tr></thead>
+      <tbody>
+      {% for pc in partial_closes %}
+      <tr>
+        <td>{{ (pc.closed_at or '')[:19] }}</td>
+        <td>{{ pc.quantity_closed }}</td>
+        <td>${{ '%.4f'|format(pc.close_price or 0) }}</td>
+        <td class="{{ 'green' if (pc.pnl_usd or 0) >= 0 else 'red' }}">${{ '%+.2f'|format(pc.pnl_usd or 0) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<p style="margin-top:24px"><a href="/trades" style="color:var(--muted)">← Back to trades</a></p>
 {% endblock %}

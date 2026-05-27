@@ -52,3 +52,91 @@ article.md { background: var(--bg-light); padding: 18px 24px; border: 1px solid 
 article.md h1, article.md h2, article.md h3 { color: var(--accent); border: none; }
 article.md table { font-size: 13px; }
 canvas { background: var(--bg-light); border-radius: 6px; padding: 8px; }
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+#status-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: #0d0d11; border-bottom: 1px solid var(--border);
+  padding: 5px 16px; display: flex; align-items: center;
+  flex-wrap: wrap; gap: 4px; font-size: 12px; color: var(--muted);
+  min-height: 32px;
+}
+.sb-item { white-space: nowrap; }
+.sb-sep  { color: var(--border); }
+.sb-spacer { flex: 1; }
+.halt-btn {
+  background: var(--red); color: #fff; border: none; padding: 3px 10px;
+  border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.halt-btn:hover { opacity: 0.85; }
+
+/* ── Pulsing live dot ─────────────────────────────────────────────────────── */
+.live-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); margin-right: 5px; vertical-align: middle;
+  animation: pulse 2s infinite;
+}
+.live-dot.stale { background: var(--red); animation: none; }
+.live-dot.warn  { background: var(--accent); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Position unrealized P&L live cells ──────────────────────────────────── */
+.pnl-live { font-variant-numeric: tabular-nums; transition: color 0.3s; }
+.pnl-live.up   { color: var(--green); }
+.pnl-live.down { color: var(--red); }
+
+/* ── Gauge / progress bars ───────────────────────────────────────────────── */
+.gauge-wrap { margin: 6px 0; }
+.gauge-bar  { height: 10px; border-radius: 5px; background: var(--bg-light); overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: 5px; background: var(--green); transition: width 0.4s; }
+.gauge-fill.warn { background: var(--accent); }
+.gauge-fill.danger { background: var(--red); }
+.gauge-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Chart containers ────────────────────────────────────────────────────── */
+.chart-box { background: var(--bg-light); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin: 12px 0; }
+.chart-box h3 { margin-top: 0; font-size: 13px; }
+
+/* ── Stat grid ───────────────────────────────────────────────────────────── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
+.stat-box { background: var(--bg-light); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+.stat-box .s-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-box .s-val   { font-size: 20px; font-weight: 600; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.stat-box .s-val.pos { color: var(--green); }
+.stat-box .s-val.neg { color: var(--red); }
+
+/* ── Badge ───────────────────────────────────────────────────────────────── */
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge.live   { background: #1a3a1a; color: var(--green); }
+.badge.paper  { background: #2a2a1a; color: var(--accent); }
+.badge.halted { background: #3a1a1a; color: var(--red); }
+.badge.long   { background: #1a3a1a; color: var(--green); }
+.badge.short  { background: #3a1a1a; color: var(--red); }
+
+/* ── Funnel bars ─────────────────────────────────────────────────────────── */
+.funnel { margin: 16px 0; }
+.funnel-step { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.funnel-step .f-label { width: 140px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
+.funnel-step .f-bar   { height: 22px; border-radius: 3px; background: var(--accent); opacity: 0.85; min-width: 4px; transition: width 0.4s; }
+.funnel-step .f-count { font-size: 13px; font-weight: 600; margin-left: 4px; width: 50px; }
+
+/* ── Heatmap grid ────────────────────────────────────────────────────────── */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap { border-collapse: collapse; font-size: 11px; }
+.heatmap th, .heatmap td { padding: 3px 5px; text-align: center; border: 1px solid var(--border); min-width: 40px; }
+.heatmap th { background: var(--bg-light); color: var(--muted); }
+
+/* ── Mobile view ─────────────────────────────────────────────────────────── */
+.mobile-link { font-size: 16px; }
+@media (max-width: 640px) {
+  header { flex-direction: column; gap: 8px; }
+  header nav a { font-size: 12px; margin-right: 10px; }
+  main { padding: 12px; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .row, .row3 { grid-template-columns: 1fr; }
+}

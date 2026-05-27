@@ -1,0 +1,96 @@
+{% extends "_base.html" %}
+{% block title %}Risk{% endblock %}
+{% block content %}
+<h2>Risk Dashboard</h2>
+
+<div class="stats-grid" style="margin-bottom:24px">
+  <div class="stat-box">
+    <div class="s-label">Gross Exposure</div>
+    <div class="s-val {{ 'neg' if exposure_pct > 80 else ('pos' if exposure_pct < 50 else '') }}">${{ '%.0f'|format(gross_notional) }}</div>
+    <div style="font-size:11px;color:var(--muted)">{{ '%.1f'|format(exposure_pct) }}% of ${{ '%.0f'|format(capital) }}</div>
+  </div>
+  {% if risk_snapshot %}
+  <div class="stat-box">
+    <div class="s-label">VaR 95% (1d)</div>
+    <div class="s-val neg">${{ '%.2f'|format(risk_snapshot.var_95_1d_usd or 0) }}</div>
+    <div style="font-size:11px;color:var(--muted)">{{ '%.2f'|format(risk_snapshot.var_95_pct or 0) }}% of capital</div>
+  </div>
+  <div class="stat-box">
+    <div class="s-label">Max Correlation</div>
+    <div class="s-val">{{ risk_snapshot.max_pairwise_correlation or '—' }}</div>
+  </div>
+  {% endif %}
+  <div class="stat-box">
+    <div class="s-label">Exposure Limit</div>
+    <div class="s-val">{{ max_exposure_pct }}%</div>
+    <div style="font-size:11px;color:var(--muted)">paper mode</div>
+  </div>
+</div>
+
+<h3>Portfolio Exposure</h3>
+<div class="gauge-wrap">
+  {% set fill_pct = [exposure_pct / max_exposure_pct * 100, 100]|min %}
+  <div class="gauge-bar">
+    <div class="gauge-fill {{ 'danger' if fill_pct > 90 else ('warn' if fill_pct > 60 else '') }}"
+         style="width:{{ fill_pct }}%"></div>
+  </div>
+  <div class="gauge-label">
+    <span>0%</span>
+    <span>${{ '%.0f'|format(gross_notional) }} / {{ '%.1f'|format(exposure_pct) }}% used</span>
+    <span>{{ max_exposure_pct }}%</span>
+  </div>
+</div>
+
+{% if risk_snapshot %}
+<h3>Latest Risk Snapshot</h3>
+<table class="kv" style="max-width:600px">
+  <tr><th>Timestamp</th><td>{{ (risk_snapshot.snapshot_time or risk_snapshot.created_at or '—')[:19] }}</td></tr>
+  <tr><th>Open positions</th><td>{{ risk_snapshot.open_positions or '—' }}</td></tr>
+  <tr><th>Gross notional</th><td>${{ '%.2f'|format(risk_snapshot.gross_notional_usd or 0) }}</td></tr>
+  <tr><th>VaR 95% 1d</th><td>${{ '%.2f'|format(risk_snapshot.var_95_1d_usd or 0) }} ({{ '%.2f'|format(risk_snapshot.var_95_pct or 0) }}%)</td></tr>
+  <tr><th>CVaR 95% 1d</th><td>${{ '%.2f'|format(risk_snapshot.cvar_95_1d_usd or 0) }}</td></tr>
+  <tr><th>Max pair corr</th><td>{{ risk_snapshot.max_pairwise_correlation or '—' }}</td></tr>
+  <tr><th>Halted</th><td>{{ risk_snapshot.halt_triggered or 'false' }}</td></tr>
+</table>
+{% endif %}
+
+{% if corr_matrix_json %}
+<h3>Correlation Heatmap</h3>
+<div class="heatmap-wrap">
+  <div id="corr-matrix-data" style="display:none">{{ corr_matrix_json }}</div>
+  <table class="heatmap" id="corr-table"></table>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    const raw = document.getElementById('corr-matrix-data').textContent.trim();
+    const matrix = JSON.parse(raw);
+    const assets = Object.keys(matrix);
+    const table = document.getElementById('corr-table');
+    // header row
+    let thead = '<thead><tr><th></th>';
+    assets.forEach(a => { thead += `<th>${a}</th>`; });
+    thead += '</tr></thead>';
+    // body
+    let tbody = '<tbody>';
+    assets.forEach(rowA => {
+      tbody += `<tr><th>${rowA}</th>`;
+      assets.forEach(colA => {
+        const val = (matrix[rowA] && matrix[rowA][colA] != null) ? matrix[rowA][colA] : 0;
+        const v = parseFloat(val).toFixed(2);
+        const abs = Math.abs(parseFloat(val));
+        const r = Math.round(abs * 180);
+        const bg = parseFloat(val) > 0 ? `rgba(90,168,90,${abs*0.8})` : `rgba(208,90,90,${abs*0.8})`;
+        tbody += `<td style="background:${bg}">${v}</td>`;
+      });
+      tbody += '</tr>';
+    });
+    tbody += '</tbody>';
+    table.innerHTML = thead + tbody;
+  } catch(e) { document.getElementById('corr-table').innerHTML = '<tr><td class="muted">No matrix data</td></tr>'; }
+});
+</script>
+{% else %}
+<p class="muted">No correlation matrix data yet.</p>
+{% endif %}
+{% endblock %}
