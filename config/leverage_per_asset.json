@@ -2,19 +2,20 @@
   "_comment": "Per-asset leverage tiers. The risk engine looks up the symbol's tier and uses (default | high_conviction_70 | high_conviction_80) based on confluence score. Falls back to risk_params.json leverage_limits if a symbol isn't listed. The `enabled` flag gates whole asset classes \u2014 flip to true once the broker adapter is wired and paper-tested. Tiers are deliberately aggressive: a 250 EUR budget needs leverage to generate meaningful P&L, and the 2%-per-trade risk cap means leverage only affects margin (not loss), provided exchange-side SL fills (slippage on flash crashes is the real residual risk).",
   "crypto_perp": {
     "enabled": true,
+    "_note": "Post-MiCA (2026-05): OKX blocks EU residents on all crypto perps. We route crypto via Alpaca spot for BTC/ETH/SOL (no leverage, long-only) and synthetic for everything else (paper R&D). Tiers below reflect that — 1x for the Alpaca-routed pairs; legacy tiers preserved for the synthetic-routed alts in case we ever want to re-enable a perp venue.",
     "tiers": {
       "low_vol_majors": {
         "symbols": [
           "BTC/USDT:USDT",
-          "ETH/USDT:USDT"
+          "ETH/USDT:USDT",
+          "SOL/USDT:USDT"
         ],
-        "default": 7,
-        "high_conviction_70": 10,
-        "high_conviction_80": 15
+        "default": 1,
+        "high_conviction_70": 1,
+        "high_conviction_80": 1
       },
       "large_cap_alts": {
         "symbols": [
-          "SOL/USDT:USDT",
           "LINK/USDT:USDT",
           "AVAX/USDT:USDT",
           "ADA/USDT:USDT",

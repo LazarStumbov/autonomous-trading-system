@@ -1,4 +1,5 @@
 {
+  "_crypto_routing_note": "Post-MiCA (2026-05): broker_router routes BTC/ETH/SOL through Alpaca spot (real fills, 1x, long-only). All other crypto symbols fall through to synthetic (paper-only research). The crypto_perpetuals list is kept for symbol coverage in scans/screeners — it does NOT mean we trade them for real.",
   "watchlist": {
     "crypto_perpetuals": [
       "BTC/USDT:USDT",

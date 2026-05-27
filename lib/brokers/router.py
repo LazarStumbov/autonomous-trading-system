@@ -14,7 +14,7 @@ Resolution order for any given symbol:
   4. Cache the instance per process so we don't reconstruct on every call
 
 Env vars (override defaults):
-  CRYPTO_PERP_BROKER  default 'okx'        — crypto perpetuals
+  CRYPTO_PERP_BROKER  default 'alpaca'     — crypto (now routed to Alpaca spot post-MiCA blockade)
   CRYPTO_SPOT_BROKER  default 'alpaca'     — crypto spot
   STOCKS_BROKER       default 'alpaca'     — equities, bond ETFs
   BONDS_BROKER        default 'alpaca'     — bond ETFs (TLT, IEF, AGG)
@@ -24,6 +24,11 @@ Env vars (override defaults):
 When the resolver returns 'synthetic', the caller should fall through to the
 existing paper_engine.simulate_order() path (this is what bonds and CFDs do
 until those adapters are wired).
+
+Post-MiCA crypto routing (2026-05): OKX blocks BTC/ETH and all alt perps for
+EU residents. We re-route all crypto through Alpaca spot for BTC/ETH/SOL
+(the only pairs we trade for real), and fall through to synthetic for alts
+(ARB/OP/SUI/etc.) which are paper-only research.
 """
 
 from __future__ import annotations
@@ -35,7 +40,7 @@ from lib.brokers.base import BrokerAdapter
 
 
 _DEFAULT_BROKER_BY_CLASS = {
-    "crypto_perp":     "okx",
+    "crypto_perp":     "alpaca",   # post-MiCA: OKX blocks EU residents; Alpaca spot for BTC/ETH/SOL
     "crypto_spot":     "alpaca",
     "stock_equity":    "alpaca",
     "bond_etf":        "alpaca",
@@ -97,6 +102,22 @@ def _instantiate(broker_name: str) -> Optional[BrokerAdapter]:
         return None
 
 
+# Alpaca crypto whitelist — bases we actually trade for real. Everything
+# outside this list falls through to synthetic (paper-only research). Keep
+# small and explicit; expanding requires confirming Alpaca's supported list.
+_ALPACA_CRYPTO_BASES = {"BTC", "ETH", "SOL"}
+
+
+def _alpaca_supports_crypto_symbol(symbol: str) -> bool:
+    """Extract the base asset from a crypto symbol and check the whitelist.
+
+    Handles 'BTC/USDT:USDT', 'BTC/USDT', 'BTC/USD', 'BTC'.
+    """
+    s = (symbol or "").upper()
+    base = s.split("/")[0].split(":")[0]
+    return base in _ALPACA_CRYPTO_BASES
+
+
 def adapter_for_symbol(symbol: str) -> tuple[Optional[BrokerAdapter], str, str]:
     """Return (adapter, broker_name, asset_class) for a given symbol.
 
@@ -111,6 +132,13 @@ def adapter_for_symbol(symbol: str) -> tuple[Optional[BrokerAdapter], str, str]:
 
     asset_class = _infer_asset_class(symbol) or "unknown"
     broker_name = _broker_for_class(asset_class)
+
+    # Crypto + Alpaca: only BTC/ETH/SOL are supported. Unsupported alts fall
+    # through to synthetic so we don't send bad orders to the Alpaca API.
+    if broker_name == "alpaca" and asset_class in ("crypto_perp", "crypto_spot"):
+        if not _alpaca_supports_crypto_symbol(symbol):
+            broker_name = "synthetic"
+
     adapter = _instantiate(broker_name)
     return adapter, broker_name, asset_class
 
