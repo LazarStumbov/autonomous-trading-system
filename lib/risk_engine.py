@@ -149,13 +149,26 @@ def check_leverage(
 
     approved = min(requested_leverage, max_allowed, limits["absolute_max"])
 
+    # Per-asset / per-tier caps are clip-don't-fail: requested > max_allowed
+    # silently clips to max_allowed. Only the global absolute_max ceiling is a
+    # hard veto — that's the regulatory / safety floor we never override.
+    # Previously this returned FAIL whenever requested > max_allowed, which
+    # blocked every stock alert that asked for 3x when ESMA caps stocks at 2x.
+    hard_fail = requested_leverage > limits["absolute_max"]
+    clipped = requested_leverage > max_allowed and not hard_fail
     return {
         "requested": requested_leverage,
         "approved": approved,
         "max_allowed": max_allowed,
         "source": source,
-        "verdict": RiskVerdict.PASS if requested_leverage <= max_allowed else RiskVerdict.FAIL,
-        "reason": f"Leverage {approved}x approved (max {max_allowed}x via {source} for confluence {confluence_score})",
+        "clipped": clipped,
+        "verdict": RiskVerdict.FAIL if hard_fail else RiskVerdict.PASS,
+        "reason": (
+            f"Leverage {approved}x approved (clipped from {requested_leverage}x; "
+            f"cap {max_allowed}x via {source})"
+            if clipped
+            else f"Leverage {approved}x approved (max {max_allowed}x via {source} for confluence {confluence_score})"
+        ),
     }
 
 
