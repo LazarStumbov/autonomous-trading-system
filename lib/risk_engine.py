@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 import os
-from lib.db import get_connection, get_open_trades, get_system_state, get_daily_stats
-from lib.constants import RiskVerdict, MAX_RISK_PER_TRADE_PCT, MAX_DAILY_DRAWDOWN_PCT
+from lib.db import get_connection, get_open_trades, get_system_state
+from lib.constants import RiskVerdict
 
 
 def load_risk_config() -> dict:
@@ -322,6 +322,79 @@ def _infer_asset_class(asset: str) -> str | None:
     return None
 
 
+def check_asset_class_concentration(
+    new_asset: str,
+    new_position_value: float,
+    capital: float,
+    db_path: str = None,
+) -> dict:
+    """Reject trades that would push a single asset class past the concentration cap.
+
+    Uses the same margin-denominated exposure as check_portfolio_exposure so the
+    two caps are consistent. Asset class is inferred from the symbol via
+    _infer_asset_class; unknown symbols are bucketed as 'other' (no block).
+
+    Returns:
+        Dict with per-class breakdown, verdict, reason.
+    """
+    config = load_risk_config()
+    cap_pct = config.get("market_trading", {}).get("max_single_class_exposure_pct", 60.0)
+
+    conn = get_connection(db_path) if db_path else get_connection()
+    open_trades = get_open_trades(conn)
+    conn.close()
+
+    class_exposure: dict[str, float] = {}
+    for t in open_trades:
+        qty = t.get("quantity") or 0
+        px = t.get("entry_price") or 0
+        lev = max(1, int(t.get("leverage") or 1))
+        cls = _infer_asset_class(t.get("asset", "")) or "other"
+        class_exposure[cls] = class_exposure.get(cls, 0.0) + (qty * px) / lev
+
+    new_cls = _infer_asset_class(new_asset) or "other"
+    class_exposure[new_cls] = class_exposure.get(new_cls, 0.0) + new_position_value
+
+    worst_cls = max(class_exposure, key=class_exposure.get)
+    worst_pct = (class_exposure[worst_cls] / capital * 100) if capital > 0 else 0.0
+    verdict = RiskVerdict.PASS if worst_pct <= cap_pct else RiskVerdict.FAIL
+
+    return {
+        "new_asset_class": new_cls,
+        "class_exposure": {k: round(v, 2) for k, v in class_exposure.items()},
+        "worst_class": worst_cls,
+        "worst_class_pct": round(worst_pct, 2),
+        "cap_pct": cap_pct,
+        "verdict": verdict,
+        "reason": f"{worst_cls} concentration {worst_pct:.1f}% vs cap {cap_pct}%",
+    }
+
+
+def lookup_confluence_floor(asset_symbol: str, config: dict | None = None) -> int:
+    """Return the minimum confluence score required to trade this symbol.
+
+    Floors are keyed by tier name from leverage_per_asset.json, stored in
+    risk_params.market_trading.confluence_floors_by_tier. Unlisted symbols
+    get the 'default' floor (50 — no change from prior behaviour).
+    """
+    if config is None:
+        config = load_risk_config()
+    floors = config.get("market_trading", {}).get("confluence_floors_by_tier", {})
+    if not floors:
+        return 50
+
+    cfg = load_leverage_per_asset()
+    sym = (asset_symbol or "").upper()
+    for class_name, class_cfg in cfg.items():
+        if class_name.startswith("_"):
+            continue
+        for tier_name, tier in (class_cfg.get("tiers") or {}).items():
+            if sym in [s.upper() for s in tier.get("symbols", [])]:
+                return int(floors.get(tier_name, floors.get("default", 50)))
+
+    return int(floors.get("default", 50))
+
+
 def check_trade(
     capital: float,
     asset: str,
@@ -346,6 +419,18 @@ def check_trade(
 
     checks = {}
     failures = []
+
+    # 0. Per-asset confluence floor — fast-fail low-quality signals before any DB I/O
+    floor = lookup_confluence_floor(asset, config)
+    confluence_ok = confluence_score >= floor
+    checks["confluence_floor"] = {
+        "required": floor,
+        "provided": confluence_score,
+        "verdict": RiskVerdict.PASS if confluence_ok else RiskVerdict.FAIL,
+        "reason": f"Confluence {confluence_score} vs floor {floor} for {asset}",
+    }
+    if not confluence_ok:
+        failures.append(checks["confluence_floor"]["reason"])
 
     # 1. Circuit breakers
     checks["circuit_breakers"] = check_circuit_breakers(db_path)
@@ -399,12 +484,19 @@ def check_trade(
     if checks["exposure"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["exposure"]["reason"])
 
-    # 7. Correlated positions
+    # 7. Asset-class concentration — no single class > 60% of capital in margin terms
+    checks["class_concentration"] = check_asset_class_concentration(
+        asset, margin_required, capital, db_path
+    )
+    if checks["class_concentration"]["verdict"] == RiskVerdict.FAIL:
+        failures.append(checks["class_concentration"]["reason"])
+
+    # 8. Correlated positions
     checks["correlation"] = check_correlated_positions(asset, direction, db_path)
     if checks["correlation"]["verdict"] == RiskVerdict.FAIL:
         failures.append(checks["correlation"]["reason"])
 
-    # 8. Stop loss present
+    # 9. Stop loss present
     has_sl = stop_loss_price is not None and stop_loss_price > 0
     checks["stop_loss"] = {
         "present": has_sl,
@@ -414,7 +506,7 @@ def check_trade(
     if not has_sl:
         failures.append("No stop loss set")
 
-    # 9. Macro blackout — reject new positions within ~15min of FOMC / CPI /
+    # 10. Macro blackout — reject new positions within ~15min of FOMC / CPI /
     # NFP / ECB / etc. Feature-flagged via risk_params.market_trading.macro_blackout_enabled
     # (default true). Asset-class is inferred from symbol via best-effort
     # lookup; on inference failure the gate fails open (no block).

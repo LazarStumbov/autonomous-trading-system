@@ -50,7 +50,20 @@
       "require_manual_resume_after_weekly_halt": true
     },
     "macro_blackout_enabled": true,
-    "max_new_trades_per_cycle": 2
+    "max_new_trades_per_cycle": 2,
+    "max_single_class_exposure_pct": 60.0,
+    "confluence_floors_by_tier": {
+      "_comment": "Min confluence score keyed by tier name from leverage_per_asset.json. 'default' applies to unlisted symbols.",
+      "low_vol_majors": 50,
+      "major_indices": 50,
+      "metals_oil": 50,
+      "us_large_cap": 50,
+      "treasuries": 50,
+      "majors": 50,
+      "large_cap_alts": 60,
+      "high_vol_alts": 70,
+      "default": 50
+    }
   },
   "polymarket": {
     "max_bet_pct_bankroll": 5.0,
