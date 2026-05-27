@@ -245,9 +245,15 @@ def main() -> int:
         print("[discover_wallets] empty leaderboard — skipping write")
         return 0
 
+    # Seed wallets bypass the coarse filter — they're manually curated.
+    seed_wallets = {w.lower() for w in (cfg.get("seed_wallets") or [])}
+
     # Filter on raw thresholds before paying for activity pulls
     coarse_filtered: list[tuple[str, dict]] = []
     for wallet, entry in candidates.items():
+        if wallet.lower() in seed_wallets:
+            coarse_filtered.append((wallet, entry))
+            continue
         win_rate = _safe_float(entry.get("winRate") or entry.get("win_rate"))
         if win_rate > 1:
             win_rate = win_rate / 100.0

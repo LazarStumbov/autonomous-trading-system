@@ -16,6 +16,7 @@ upstream.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -210,17 +211,38 @@ def get_wallet_positions(wallet: str) -> list[dict]:
 
 
 def get_leaderboard(period: str = "month", limit: int = 100) -> list[dict]:
-    """period ∈ {day, week, month, all}. Returns ranked traders by profit."""
-    data = _get(
-        f"{DATA_BASE}/leaderboard",
-        params={"window": period, "limit": limit},
-    )
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for key in ("leaderboard", "users", "data", "results"):
-            if isinstance(data.get(key), list):
-                return data[key]
+    """Return ranked traders by profit. Tries several endpoint shapes since the
+    data-api /leaderboard path was removed in mid-2025.
+
+    Falls back to seed wallets from config/polymarket_accounts.json if all
+    endpoints return 404 — so at least activity-scoring can run on known wallets.
+    """
+    # Try current and legacy endpoint shapes
+    for path, params in [
+        (f"{DATA_BASE}/leaderboard", {"window": period, "limit": limit}),
+        (f"{DATA_BASE}/leaderboard", {"period": period, "limit": limit}),
+        (f"{GAMMA_BASE}/leaderboard", {"limit": limit}),
+    ]:
+        data = _get(path, params=params)
+        if isinstance(data, list) and data:
+            return data
+        if isinstance(data, dict):
+            for key in ("leaderboard", "users", "data", "results"):
+                if isinstance(data.get(key), list) and data[key]:
+                    return data[key]
+
+    # All remote endpoints failed — seed from config so scoring can still run
+    try:
+        cfg_path = project_root() / "config" / "polymarket_accounts.json"
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        seeds = cfg.get("seed_wallets", [])
+        if seeds:
+            print(f"[pm_api] leaderboard unavailable; using {len(seeds)} seed wallets from config")
+            return [{"proxyWallet": w, "profit": 0} for w in seeds]
+    except Exception:
+        pass
+
     return []
 
 

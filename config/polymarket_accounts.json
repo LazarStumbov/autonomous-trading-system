@@ -1,9 +1,13 @@
 {
   "tracked_accounts": [],
+  "_seed_wallet_note": "Add real Polymarket trader addresses here. Polymarket leaderboard API was removed mid-2025; seed_wallets is the only discovery path until it returns or scraping is added.",
+  "seed_wallets": [
+    "0x91430CaD2d3975766499717fA0D66A78D814E5c5"
+  ],
   "discovery": {
-    "min_positions": 20,
-    "min_win_rate": 0.55,
-    "min_profit_usd": 1000,
+    "min_positions": 5,
+    "min_win_rate": 0.4,
+    "min_profit_usd": 0,
     "scoring_formula": "win_rate * ln(1 + total_positions)",
     "refresh_weekly": true,
     "max_tracked": 25
@@ -22,6 +26,8 @@
     "consistency": 0.25,
     "category_diversity": 0.15,
     "conviction_sizing": 0.15,
-    "recency": 0.10
-  }
+    "recency": 0.1
+  },
+  "wallet_clusters": [],
+  "last_refreshed": "2026-05-27T16:00:46.601179+00:00"
 }
