@@ -104,7 +104,21 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
 
     capital = _get_capital()
     stats = {"attempted": 0, "passed": 0, "executed": 0, "failed_risk": 0,
-             "errors": 0, "failed_tier": 0, "skipped_caps": 0}
+             "errors": 0, "failed_tier": 0, "skipped_caps": 0, "skipped_dup": 0}
+
+    # Build set of (asset, strategy) pairs that already have an open position.
+    # This is the cross-cycle duplicate guard: a given strategy is not allowed
+    # to re-enter the same asset until its existing position closes.
+    try:
+        from lib.db import get_connection as _get_conn
+        _conn = _get_conn()
+        _open_rows = _conn.execute(
+            "SELECT asset, strategy FROM trades WHERE status='open'"
+        ).fetchall()
+        _conn.close()
+        open_asset_strategy: set = {(r[0], r[1]) for r in _open_rows if r[1]}
+    except Exception:
+        open_asset_strategy = set()
 
     # P4: per-cycle caps — load from config/risk_params.json with sensible defaults.
     # max_new_trades_per_cycle = global ceiling (default 2)
@@ -150,6 +164,16 @@ def run(alerts_path: Path | None = None, dry_run: bool = False) -> dict:
                 f"tier={tier} score={confluence} threshold={effective_min}"
             )
             stats["failed_tier"] += 1
+            continue
+
+        # Cross-cycle duplicate guard: skip if this asset+strategy already has
+        # an open position (prevents re-entering the same stale setup hourly).
+        if (symbol, strategy) in open_asset_strategy:
+            print(
+                f"[pipeline_runner] DUP_SKIP {symbol} {direction} strategy={strategy} "
+                f"— already open position for this asset+strategy"
+            )
+            stats["skipped_dup"] += 1
             continue
 
         # P4: per-cycle caps. Block once we hit the global ceiling. Block any
