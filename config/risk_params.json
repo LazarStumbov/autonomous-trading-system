@@ -17,7 +17,18 @@
       "default_atr_multiplier": 2.0,
       "max_stop_distance_pct": 5.0,
       "trailing_stop_activation_pct": 1.5,
-      "trailing_stop_distance_pct": 1.0
+      "trailing_stop_distance_pct": 1.0,
+      "_min_sl_note": "Per-class minimum SL distance %. Tight SLs (<floor) get rejected upstream because the fixed 2%-risk math otherwise grows position size 4-10x to compensate, blowing the margin budget. Floors are chosen to be wider than typical intraday noise for each class.",
+      "min_stop_distance_pct_by_class": {
+        "crypto_perp": 1.2,
+        "crypto_spot": 1.2,
+        "stock_equity": 0.8,
+        "bond_etf": 0.4,
+        "forex_spot": 0.3,
+        "cfd_index": 1.0,
+        "cfd_commodity": 1.0,
+        "default": 0.8
+      }
     },
     "take_profit": {
       "default_rr_ratio": 2.0,

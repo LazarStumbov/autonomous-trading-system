@@ -469,6 +469,32 @@ def check_trade(
     if not rr_ok:
         failures.append(checks["risk_reward"]["reason"])
 
+    # 3b. Minimum SL distance — tight SLs (e.g. 0.6% on indices) cause the
+    # 2%-risk math to grow position size 4-10x and blow the margin budget.
+    # Reject upstream so we don't waste alert capacity on these. Per-class
+    # floors live in risk_params.market_trading.stop_loss.min_stop_distance_pct_by_class.
+    sl_floors_cfg = (config["market_trading"]
+                     .get("stop_loss", {})
+                     .get("min_stop_distance_pct_by_class") or {})
+    if sl_floors_cfg and entry_price > 0:
+        inferred_class = _infer_asset_class(asset) or "default"
+        min_sl_pct = float(sl_floors_cfg.get(inferred_class,
+                                             sl_floors_cfg.get("default", 0)))
+        sl_pct = (risk_distance / entry_price) * 100 if entry_price > 0 else 0
+        sl_ok = sl_pct >= min_sl_pct
+        checks["min_sl_distance"] = {
+            "sl_pct": round(sl_pct, 3),
+            "min_required_pct": min_sl_pct,
+            "asset_class": inferred_class,
+            "verdict": RiskVerdict.PASS if sl_ok else RiskVerdict.FAIL,
+            "reason": (
+                f"SL distance {sl_pct:.2f}% below floor {min_sl_pct}% for {inferred_class}"
+                if not sl_ok else f"SL distance {sl_pct:.2f}% >= floor {min_sl_pct}%"
+            ),
+        }
+        if not sl_ok:
+            failures.append(checks["min_sl_distance"]["reason"])
+
     # 4. Position sizing
     checks["position_size"] = calculate_position_size(capital, entry_price, stop_loss_price)
 
